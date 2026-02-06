@@ -1,11 +1,9 @@
 import SwiftUI
 
 struct ToolbarView: View {
-    var isEditMode: Bool
     var onNewNote: () -> Void
     var onSearch: () -> Void
     var onSettings: () -> Void
-    var onToggleMode: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -40,16 +38,6 @@ struct ToolbarView: View {
             }
             .buttonStyle(.plain)
             .help("Settings")
-
-            Button(action: onToggleMode) {
-                Image(systemName: isEditMode ? "eye" : "pencil")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Monokai.foreground)
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help(isEditMode ? "Preview" : "Edit")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)

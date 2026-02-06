@@ -23,7 +23,7 @@ struct NoteEditorView: NSViewRepresentable {
         textView.isSelectable = true
         textView.allowsUndo = true
         textView.drawsBackground = false
-        textView.isRichText = false
+        textView.isRichText = true
         textView.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
         textView.textColor = Monokai.foregroundNS
         textView.insertionPointColor = Monokai.foregroundNS
@@ -39,6 +39,7 @@ struct NoteEditorView: NSViewRepresentable {
         textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
 
         textView.string = text
+        context.coordinator.highlighter.highlight(textView.textStorage!)
 
         scrollView.documentView = textView
         context.coordinator.textView = textView
@@ -51,6 +52,7 @@ struct NoteEditorView: NSViewRepresentable {
         if textView.string != text {
             let selectedRanges = textView.selectedRanges
             textView.string = text
+            context.coordinator.highlighter.highlight(textView.textStorage!)
             textView.selectedRanges = selectedRanges
         }
 
@@ -70,6 +72,7 @@ struct NoteEditorView: NSViewRepresentable {
         var parent: NoteEditorView
         weak var textView: NSTextView?
         var hasFocused = false
+        let highlighter = MarkdownHighlighter()
         private var debounceTask: Task<Void, Never>?
 
         init(_ parent: NoteEditorView) {
@@ -78,6 +81,9 @@ struct NoteEditorView: NSViewRepresentable {
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
+
+            highlighter.highlight(textView.textStorage!)
+
             let newText = textView.string
 
             debounceTask?.cancel()
@@ -96,10 +102,17 @@ final class MarkdownNSTextView: NSTextView {
     override func paste(_ sender: Any?) {
         let pasteboard = NSPasteboard.general
 
+        // Check for image paste first
         if let image = NSImage(pasteboard: pasteboard),
            let onImagePaste,
            let markdown = onImagePaste(image) {
             insertText(markdown, replacementRange: selectedRange())
+            return
+        }
+
+        // Strip rich text: extract plain string only
+        if let plainString = pasteboard.string(forType: .string) {
+            insertText(plainString, replacementRange: selectedRange())
             return
         }
 
@@ -117,5 +130,52 @@ final class MarkdownNSTextView: NSTextView {
         }
 
         return super.performDragOperation(sender)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+
+        guard let layoutManager = layoutManager,
+              let textContainer = textContainer else {
+            super.mouseDown(with: event)
+            return
+        }
+
+        var fraction: CGFloat = 0
+        let adjustedPoint = NSPoint(x: point.x - textContainerInset.width,
+                                     y: point.y - textContainerInset.height)
+        let charIndex = layoutManager.characterIndex(for: adjustedPoint,
+                                                      in: textContainer,
+                                                      fractionOfDistanceBetweenInsertionPoints: &fraction)
+
+        guard charIndex < (string as NSString).length else {
+            super.mouseDown(with: event)
+            return
+        }
+
+        if let checkboxRange = textStorage?.attribute(.checkboxRange, at: charIndex, effectiveRange: nil) as? NSRange {
+            toggleCheckbox(at: checkboxRange)
+            return
+        }
+
+        super.mouseDown(with: event)
+    }
+
+    private func toggleCheckbox(at range: NSRange) {
+        let text = string as NSString
+        guard range.location + range.length <= text.length else { return }
+
+        let current = text.substring(with: range)
+        let replacement: String
+        if current.contains(" ") {
+            replacement = current.replacingOccurrences(of: "[ ]", with: "[x]")
+        } else {
+            replacement = current.replacingOccurrences(of: "[x]", with: "[ ]")
+        }
+
+        if shouldChangeText(in: range, replacementString: replacement) {
+            replaceCharacters(in: range, with: replacement)
+            didChangeText()
+        }
     }
 }

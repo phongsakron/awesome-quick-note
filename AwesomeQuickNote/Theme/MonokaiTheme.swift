@@ -12,6 +12,14 @@ enum Monokai {
 
     static let backgroundNS = NSColor(hex: 0x272822)
     static let foregroundNS = NSColor(hex: 0xF8F8F2)
+    static let keywordNS = NSColor(hex: 0xF92672)
+    static let stringNS = NSColor(hex: 0xE6DB74)
+    static let functionNS = NSColor(hex: 0xA6E22E)
+    static let typeNS = NSColor(hex: 0x66D9EF)
+    static let numberNS = NSColor(hex: 0xAE81FF)
+    static let commentNS = NSColor(hex: 0x75715E)
+    static let codeBlockBgNS = NSColor(hex: 0x1E1F1C)
+    static let inlineCodeBgNS = NSColor(hex: 0x3E3D32)
 
     static let panelBackground = Color(hex: 0x272822).opacity(0.6)
     static let toolbarBackground = Color(hex: 0x1E1F1C)

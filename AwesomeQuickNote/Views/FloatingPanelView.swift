@@ -7,7 +7,6 @@ struct FloatingPanelView: View {
     let imageManager: ImageManager
 
     @State private var selectedNote: Note?
-    @State private var isEditMode: Bool = true
     @State private var editingContent: String = ""
     @State private var saveTask: Task<Void, Never>?
     @State private var editorFocusTrigger: Bool = false
@@ -63,11 +62,9 @@ struct FloatingPanelView: View {
     @ViewBuilder
     private var mainContent: some View {
         ToolbarView(
-            isEditMode: isEditMode,
             onNewNote: handleNewNote,
             onSearch: handleSearch,
-            onSettings: handleSettings,
-            onToggleMode: toggleMode
+            onSettings: handleSettings
         )
 
         Divider().background(Monokai.border)
@@ -95,23 +92,13 @@ struct FloatingPanelView: View {
 
     @ViewBuilder
     private var contentArea: some View {
-        if isEditMode {
-            NoteEditorView(
-                text: $editingContent,
-                onImagePaste: { image in
-                    imageManager.saveImage(image)
-                },
-                shouldFocus: editorFocusTrigger
-            )
-        } else {
-            NotePreviewView(
-                content: editingContent,
-                vaultURL: vaultManager.vaultURL,
-                onToggleCheckbox: { lineIndex in
-                    toggleCheckbox(at: lineIndex)
-                }
-            )
-        }
+        NoteEditorView(
+            text: $editingContent,
+            onImagePaste: { image in
+                imageManager.saveImage(image)
+            },
+            shouldFocus: editorFocusTrigger
+        )
     }
 
     private var emptyState: some View {
@@ -134,7 +121,6 @@ struct FloatingPanelView: View {
         if let note = vaultManager.createNote() {
             selectedNote = note
             editingContent = note.content
-            isEditMode = true
             editorFocusTrigger = true
         }
     }
@@ -147,16 +133,6 @@ struct FloatingPanelView: View {
     private func handleSettings() {
         editorFocusTrigger = false
         panelController.showSettings()
-    }
-
-    private func toggleMode() {
-        if isEditMode {
-            saveCurrentNote()
-            editorFocusTrigger = false
-        } else {
-            editorFocusTrigger = true
-        }
-        isEditMode.toggle()
     }
 
     private func dismissOverlays() {
@@ -199,20 +175,5 @@ struct FloatingPanelView: View {
             guard !Task.isCancelled else { return }
             saveCurrentNote()
         }
-    }
-
-    private func toggleCheckbox(at lineIndex: Int) {
-        var lines = editingContent.components(separatedBy: "\n")
-        guard lineIndex < lines.count else { return }
-
-        let line = lines[lineIndex]
-        if line.contains("- [ ]") {
-            lines[lineIndex] = line.replacingOccurrences(of: "- [ ]", with: "- [x]")
-        } else if line.contains("- [x]") {
-            lines[lineIndex] = line.replacingOccurrences(of: "- [x]", with: "- [ ]")
-        }
-
-        editingContent = lines.joined(separator: "\n")
-        saveCurrentNote()
     }
 }
