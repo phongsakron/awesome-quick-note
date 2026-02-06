@@ -32,7 +32,7 @@ final class SearchManager {
             return nil
         }
 
-        results = scored.sorted { $0.1 < $1.1 }.map(\.0)
+        results = scored.sorted { $0.1 == $1.1 ? $0.0.modifiedAt > $1.0.modifiedAt : $0.1 < $1.1 }.map(\.0)
     }
 
     func clear() {

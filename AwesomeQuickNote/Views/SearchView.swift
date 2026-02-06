@@ -7,6 +7,8 @@ struct SearchView: View {
     var onDismiss: () -> Void
 
     @State private var queryText: String = ""
+    @State private var selectedIndex: Int = 0
+    @FocusState private var isSearchFieldFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -16,9 +18,16 @@ struct SearchView: View {
         }
         .onAppear {
             searchManager.search(in: notes)
+            selectedIndex = 0
+            DispatchQueue.main.async {
+                isSearchFieldFocused = true
+            }
         }
         .onDisappear {
             searchManager.clear()
+        }
+        .onChange(of: searchManager.results) {
+            selectedIndex = 0
         }
     }
 
@@ -32,10 +41,28 @@ struct SearchView: View {
                 .textFieldStyle(.plain)
                 .font(.system(size: 14))
                 .foregroundStyle(Monokai.foreground)
+                .focused($isSearchFieldFocused)
                 .onSubmit {
-                    if let first = searchManager.results.first {
-                        selectNote(first)
+                    if !searchManager.results.isEmpty {
+                        let note = searchManager.results[selectedIndex]
+                        selectNote(note)
                     }
+                }
+                .onKeyPress(.downArrow) {
+                    if !searchManager.results.isEmpty {
+                        selectedIndex = min(selectedIndex + 1, searchManager.results.count - 1)
+                    }
+                    return .handled
+                }
+                .onKeyPress(.upArrow) {
+                    if !searchManager.results.isEmpty {
+                        selectedIndex = max(selectedIndex - 1, 0)
+                    }
+                    return .handled
+                }
+                .onKeyPress(.escape) {
+                    onDismiss()
+                    return .handled
                 }
                 .onChange(of: queryText) {
                     searchManager.query = queryText
@@ -67,43 +94,47 @@ struct SearchView: View {
     }
 
     private var resultsList: some View {
-        ScrollView {
-            LazyVStack(spacing: 2) {
-                ForEach(searchManager.results) { note in
-                    Button(action: { selectNote(note) }) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(note.title)
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(Monokai.foreground)
-                                    .lineLimit(1)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 2) {
+                    ForEach(Array(searchManager.results.enumerated()), id: \.element.id) { index, note in
+                        Button(action: { selectNote(note) }) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(note.title)
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundStyle(Monokai.foreground)
+                                        .lineLimit(1)
 
-                                Text(note.content.prefix(80).replacingOccurrences(of: "\n", with: " "))
-                                    .font(.system(size: 11))
+                                    Text(note.content.prefix(80).replacingOccurrences(of: "\n", with: " "))
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(Monokai.comment)
+                                        .lineLimit(1)
+                                }
+
+                                Spacer()
+
+                                Text(note.modifiedAt.formatted(.relative(presentation: .named)))
+                                    .font(.system(size: 10))
                                     .foregroundStyle(Monokai.comment)
-                                    .lineLimit(1)
                             }
-
-                            Spacer()
-
-                            Text(note.modifiedAt.formatted(.relative(presentation: .named)))
-                                .font(.system(size: 10))
-                                .foregroundStyle(Monokai.comment)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .contentShape(Rectangle())
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .background(Color.clear)
-                    .onHover { hovering in
-                        // Hover effect handled by SwiftUI
+                        .buttonStyle(.plain)
+                        .background(index == selectedIndex ? Monokai.tabActiveBackground : Color.clear)
+                        .clipShape(.rect(cornerRadius: 4))
+                        .id(index)
                     }
                 }
+                .padding(.vertical, 4)
             }
-            .padding(.vertical, 4)
+            .scrollIndicators(.hidden)
+            .onChange(of: selectedIndex) {
+                proxy.scrollTo(selectedIndex, anchor: .center)
+            }
         }
-        .scrollIndicators(.hidden)
     }
 
     private func selectNote(_ note: Note) {

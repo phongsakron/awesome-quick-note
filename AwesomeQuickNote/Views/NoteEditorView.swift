@@ -3,6 +3,7 @@ import SwiftUI
 struct NoteEditorView: NSViewRepresentable {
     @Binding var text: String
     var onImagePaste: ((NSImage) -> String?)?
+    var shouldFocus: Bool = false
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -52,11 +53,23 @@ struct NoteEditorView: NSViewRepresentable {
             textView.string = text
             textView.selectedRanges = selectedRanges
         }
+
+        if shouldFocus && !context.coordinator.hasFocused {
+            context.coordinator.hasFocused = true
+            DispatchQueue.main.async {
+                textView.window?.makeFirstResponder(textView)
+            }
+        }
+
+        if !shouldFocus {
+            context.coordinator.hasFocused = false
+        }
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: NoteEditorView
         weak var textView: NSTextView?
+        var hasFocused = false
         private var debounceTask: Task<Void, Never>?
 
         init(_ parent: NoteEditorView) {

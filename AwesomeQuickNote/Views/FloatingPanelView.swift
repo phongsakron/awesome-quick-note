@@ -10,6 +10,7 @@ struct FloatingPanelView: View {
     @State private var isEditMode: Bool = true
     @State private var editingContent: String = ""
     @State private var saveTask: Task<Void, Never>?
+    @State private var editorFocusTrigger: Bool = false
 
     var body: some View {
         ZStack {
@@ -25,6 +26,12 @@ struct FloatingPanelView: View {
             }
         }
         .frame(minWidth: 320, minHeight: 300)
+        .onChange(of: panelController.isVisible) {
+            if panelController.isVisible {
+                panelController.dismissOverlays()
+                editorFocusTrigger = true
+            }
+        }
         .onChange(of: panelController.pendingNewNote) {
             if panelController.pendingNewNote {
                 handleNewNote()
@@ -49,6 +56,7 @@ struct FloatingPanelView: View {
                 selectedNote = first
                 syncEditingContent()
             }
+            editorFocusTrigger = true
         }
     }
 
@@ -83,23 +91,6 @@ struct FloatingPanelView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
 
-        if !panelController.isSettingsActive {
-            Divider().background(Monokai.border)
-
-            NoteListView(
-                notes: vaultManager.notes,
-                selectedNote: Binding(
-                    get: { selectedNote },
-                    set: { newValue in
-                        if let newValue, newValue.id != selectedNote?.id {
-                            saveCurrentNote()
-                            selectedNote = newValue
-                        }
-                    }
-                ),
-                onDelete: deleteNote
-            )
-        }
     }
 
     @ViewBuilder
@@ -109,7 +100,8 @@ struct FloatingPanelView: View {
                 text: $editingContent,
                 onImagePaste: { image in
                     imageManager.saveImage(image)
-                }
+                },
+                shouldFocus: editorFocusTrigger
             )
         } else {
             NotePreviewView(
@@ -143,26 +135,33 @@ struct FloatingPanelView: View {
             selectedNote = note
             editingContent = note.content
             isEditMode = true
+            editorFocusTrigger = true
         }
     }
 
     private func handleSearch() {
+        editorFocusTrigger = false
         panelController.showSearch()
     }
 
     private func handleSettings() {
+        editorFocusTrigger = false
         panelController.showSettings()
     }
 
     private func toggleMode() {
         if isEditMode {
             saveCurrentNote()
+            editorFocusTrigger = false
+        } else {
+            editorFocusTrigger = true
         }
         isEditMode.toggle()
     }
 
     private func dismissOverlays() {
         panelController.dismissOverlays()
+        editorFocusTrigger = true
     }
 
     private func selectNote(_ note: Note) {
