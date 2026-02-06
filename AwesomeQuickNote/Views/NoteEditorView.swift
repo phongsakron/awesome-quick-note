@@ -2,6 +2,7 @@ import SwiftUI
 
 struct NoteEditorView: NSViewRepresentable {
     @Binding var text: String
+    var fontSettings: FontSettings
     var onImagePaste: ((NSImage) -> String?)?
     var shouldFocus: Bool = false
 
@@ -24,7 +25,7 @@ struct NoteEditorView: NSViewRepresentable {
         textView.allowsUndo = true
         textView.drawsBackground = false
         textView.isRichText = true
-        textView.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
+        textView.font = fontSettings.editorFont()
         textView.textColor = Monokai.foregroundNS
         textView.insertionPointColor = Monokai.foregroundNS
         textView.isAutomaticQuoteSubstitutionEnabled = false
@@ -49,22 +50,35 @@ struct NoteEditorView: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
+
+        let coordinator = context.coordinator
+        let fontChanged = coordinator.currentFontFamily != fontSettings.fontFamily
+            || coordinator.currentFontSize != fontSettings.fontSize
+
+        if fontChanged {
+            coordinator.currentFontFamily = fontSettings.fontFamily
+            coordinator.currentFontSize = fontSettings.fontSize
+            coordinator.highlighter.updateFonts(from: fontSettings)
+            textView.font = fontSettings.editorFont()
+            coordinator.highlighter.highlight(textView.textStorage!)
+        }
+
         if textView.string != text {
             let selectedRanges = textView.selectedRanges
             textView.string = text
-            context.coordinator.highlighter.highlight(textView.textStorage!)
+            coordinator.highlighter.highlight(textView.textStorage!)
             textView.selectedRanges = selectedRanges
         }
 
-        if shouldFocus && !context.coordinator.hasFocused {
-            context.coordinator.hasFocused = true
+        if shouldFocus && !coordinator.hasFocused {
+            coordinator.hasFocused = true
             DispatchQueue.main.async {
                 textView.window?.makeFirstResponder(textView)
             }
         }
 
         if !shouldFocus {
-            context.coordinator.hasFocused = false
+            coordinator.hasFocused = false
         }
     }
 
@@ -72,11 +86,16 @@ struct NoteEditorView: NSViewRepresentable {
         var parent: NoteEditorView
         weak var textView: NSTextView?
         var hasFocused = false
-        let highlighter = MarkdownHighlighter()
+        let highlighter: MarkdownHighlighter
+        var currentFontFamily: String
+        var currentFontSize: CGFloat
         private var debounceTask: Task<Void, Never>?
 
         init(_ parent: NoteEditorView) {
             self.parent = parent
+            self.highlighter = MarkdownHighlighter(fontSettings: parent.fontSettings)
+            self.currentFontFamily = parent.fontSettings.fontFamily
+            self.currentFontSize = parent.fontSettings.fontSize
         }
 
         func textDidChange(_ notification: Notification) {

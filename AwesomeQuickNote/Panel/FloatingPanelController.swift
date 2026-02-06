@@ -74,6 +74,13 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         panel.setFrame(frame, display: true, animate: true)
     }
 
+    func resetPosition() {
+        guard let panel, let screen = panel.screen ?? NSScreen.main else { return }
+        let defaultSize = NSSize(width: 480, height: 600)
+        let frame = PanelPosition.center.frame(for: defaultSize, on: screen)
+        panel.setFrame(frame, display: true, animate: true)
+    }
+
     // MARK: - Frame Persistence
 
     private func saveFrame() {

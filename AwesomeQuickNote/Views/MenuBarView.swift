@@ -28,6 +28,10 @@ struct MenuBarView: View {
                     panelController.moveToPosition(position)
                 }
             }
+            Divider()
+            Button("Reset Position") {
+                panelController.resetPosition()
+            }
         }
 
         Divider()

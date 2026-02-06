@@ -21,7 +21,7 @@ enum Monokai {
     static let codeBlockBgNS = NSColor(hex: 0x1E1F1C)
     static let inlineCodeBgNS = NSColor(hex: 0x3E3D32)
 
-    static let panelBackground = Color(hex: 0x272822).opacity(0.6)
+    static let panelBackground = Color(hex: 0x272822).opacity(0.9)
     static let toolbarBackground = Color(hex: 0x1E1F1C)
     static let tabBackground = Color(hex: 0x3E3D32)
     static let tabActiveBackground = Color(hex: 0x49483E)

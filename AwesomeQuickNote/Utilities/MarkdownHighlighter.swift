@@ -7,22 +7,26 @@ extension NSAttributedString.Key {
 final class MarkdownHighlighter {
     private var isHighlighting = false
 
-    private let baseFont = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
+    private var baseFont: NSFont
     private let baseForeground = Monokai.foregroundNS
 
     // Pre-built heading fonts
-    private let h1Font: NSFont
-    private let h2Font: NSFont
-    private let h3Font: NSFont
-    private let h4Font: NSFont
-    private let h5Font: NSFont
-    private let h6Font: NSFont
+    private var h1Font: NSFont
+    private var h2Font: NSFont
+    private var h3Font: NSFont
+    private var h4Font: NSFont
+    private var h5Font: NSFont
+    private var h6Font: NSFont
 
     // Pre-built style fonts
-    private let boldFont: NSFont
-    private let italicFont: NSFont
-    private let boldItalicFont: NSFont
-    private let codeFont: NSFont
+    private var boldFont: NSFont
+    private var italicFont: NSFont
+    private var boldItalicFont: NSFont
+    private var codeFont: NSFont
+
+    // Track current settings to detect changes
+    private var currentFontFamily: String = ""
+    private var currentFontSize: CGFloat = 0
 
     // Pre-compiled regex patterns
     private let headingH1to3Regex: NSRegularExpression
@@ -38,20 +42,37 @@ final class MarkdownHighlighter {
     private let checkboxRegex: NSRegularExpression
     private let linkRegex: NSRegularExpression
 
-    init() {
+    init(fontSettings: FontSettings? = nil) {
         let fm = NSFontManager.shared
+        let size: CGFloat = fontSettings?.fontSize ?? 14
 
-        h1Font = fm.convert(NSFont.monospacedSystemFont(ofSize: 24, weight: .bold), toHaveTrait: .boldFontMask)
-        h2Font = fm.convert(NSFont.monospacedSystemFont(ofSize: 20, weight: .bold), toHaveTrait: .boldFontMask)
-        h3Font = fm.convert(NSFont.monospacedSystemFont(ofSize: 17, weight: .bold), toHaveTrait: .boldFontMask)
-        h4Font = NSFont.monospacedSystemFont(ofSize: 15, weight: .semibold)
-        h5Font = NSFont.monospacedSystemFont(ofSize: 14, weight: .medium)
-        h6Font = NSFont.monospacedSystemFont(ofSize: 13, weight: .medium)
-
-        boldFont = fm.convert(NSFont.monospacedSystemFont(ofSize: 14, weight: .bold), toHaveTrait: .boldFontMask)
-        italicFont = fm.convert(NSFont.monospacedSystemFont(ofSize: 14, weight: .regular), toHaveTrait: .italicFontMask)
-        boldItalicFont = fm.convert(fm.convert(NSFont.monospacedSystemFont(ofSize: 14, weight: .bold), toHaveTrait: .boldFontMask), toHaveTrait: .italicFontMask)
-        codeFont = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        if let fontSettings {
+            baseFont = fontSettings.editorFont()
+            h1Font = fontSettings.boldFont(ofSize: size + 10)
+            h2Font = fontSettings.boldFont(ofSize: size + 6)
+            h3Font = fontSettings.boldFont(ofSize: size + 3)
+            h4Font = fontSettings.font(ofSize: size + 1, weight: .semibold)
+            h5Font = fontSettings.font(ofSize: size, weight: .medium)
+            h6Font = fontSettings.font(ofSize: size - 1, weight: .medium)
+            boldFont = fontSettings.boldFont(ofSize: size)
+            italicFont = fontSettings.italicFont(ofSize: size)
+            boldItalicFont = fontSettings.boldItalicFont(ofSize: size)
+            codeFont = fontSettings.font(ofSize: size - 1)
+            currentFontFamily = fontSettings.fontFamily
+            currentFontSize = fontSettings.fontSize
+        } else {
+            baseFont = NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+            h1Font = fm.convert(NSFont.monospacedSystemFont(ofSize: size + 10, weight: .bold), toHaveTrait: .boldFontMask)
+            h2Font = fm.convert(NSFont.monospacedSystemFont(ofSize: size + 6, weight: .bold), toHaveTrait: .boldFontMask)
+            h3Font = fm.convert(NSFont.monospacedSystemFont(ofSize: size + 3, weight: .bold), toHaveTrait: .boldFontMask)
+            h4Font = NSFont.monospacedSystemFont(ofSize: size + 1, weight: .semibold)
+            h5Font = NSFont.monospacedSystemFont(ofSize: size, weight: .medium)
+            h6Font = NSFont.monospacedSystemFont(ofSize: size - 1, weight: .medium)
+            boldFont = fm.convert(NSFont.monospacedSystemFont(ofSize: size, weight: .bold), toHaveTrait: .boldFontMask)
+            italicFont = fm.convert(NSFont.monospacedSystemFont(ofSize: size, weight: .regular), toHaveTrait: .italicFontMask)
+            boldItalicFont = fm.convert(fm.convert(NSFont.monospacedSystemFont(ofSize: size, weight: .bold), toHaveTrait: .boldFontMask), toHaveTrait: .italicFontMask)
+            codeFont = NSFont.monospacedSystemFont(ofSize: size - 1, weight: .regular)
+        }
 
         // Compile regex patterns
         headingH1to3Regex = try! NSRegularExpression(pattern: "^(#{1,3})\\s+(.+)$", options: .anchorsMatchLines)
@@ -66,6 +87,25 @@ final class MarkdownHighlighter {
         orderedListRegex = try! NSRegularExpression(pattern: "^(\\s*\\d+\\.)\\s", options: .anchorsMatchLines)
         checkboxRegex = try! NSRegularExpression(pattern: "^(\\s*- \\[)([ x])(\\])", options: .anchorsMatchLines)
         linkRegex = try! NSRegularExpression(pattern: "\\[([^\\]]+)\\]\\(([^)]+)\\)", options: [])
+    }
+
+    func updateFonts(from fontSettings: FontSettings) {
+        guard fontSettings.fontFamily != currentFontFamily || fontSettings.fontSize != currentFontSize else { return }
+
+        let size = fontSettings.fontSize
+        baseFont = fontSettings.editorFont()
+        h1Font = fontSettings.boldFont(ofSize: size + 10)
+        h2Font = fontSettings.boldFont(ofSize: size + 6)
+        h3Font = fontSettings.boldFont(ofSize: size + 3)
+        h4Font = fontSettings.font(ofSize: size + 1, weight: .semibold)
+        h5Font = fontSettings.font(ofSize: size, weight: .medium)
+        h6Font = fontSettings.font(ofSize: size - 1, weight: .medium)
+        boldFont = fontSettings.boldFont(ofSize: size)
+        italicFont = fontSettings.italicFont(ofSize: size)
+        boldItalicFont = fontSettings.boldItalicFont(ofSize: size)
+        codeFont = fontSettings.font(ofSize: size - 1)
+        currentFontFamily = fontSettings.fontFamily
+        currentFontSize = fontSettings.fontSize
     }
 
     func highlight(_ textStorage: NSTextStorage) {

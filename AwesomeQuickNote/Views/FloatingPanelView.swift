@@ -5,6 +5,7 @@ struct FloatingPanelView: View {
     let panelController: FloatingPanelController
     let searchManager: SearchManager
     let imageManager: ImageManager
+    let fontSettings: FontSettings
 
     @State private var selectedNote: Note?
     @State private var editingContent: String = ""
@@ -70,7 +71,7 @@ struct FloatingPanelView: View {
         Divider().background(Monokai.border)
 
         if panelController.isSettingsActive {
-            SettingsView(vaultManager: vaultManager, onDismiss: dismissOverlays)
+            SettingsView(vaultManager: vaultManager, fontSettings: fontSettings, onDismiss: dismissOverlays)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if panelController.isSearchActive {
             SearchView(
@@ -94,6 +95,7 @@ struct FloatingPanelView: View {
     private var contentArea: some View {
         NoteEditorView(
             text: $editingContent,
+            fontSettings: fontSettings,
             onImagePaste: { image in
                 imageManager.saveImage(image)
             },
