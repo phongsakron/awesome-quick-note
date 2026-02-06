@@ -7,7 +7,7 @@ struct VisualEffectView: NSViewRepresentable {
         view.blendingMode = .behindWindow
         view.state = .active
         view.appearance = NSAppearance(named: .darkAqua)
-        view.alphaValue = 0.9
+        view.alphaValue = 1.0
         return view
     }
 

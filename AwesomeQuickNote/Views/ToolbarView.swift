@@ -41,6 +41,6 @@ struct ToolbarView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .background(Monokai.toolbarBackground.opacity(0.9))
+        .background(Monokai.toolbarBackground)
     }
 }

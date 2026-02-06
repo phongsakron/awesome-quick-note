@@ -13,18 +13,14 @@ struct FloatingPanelView: View {
     @State private var editorFocusTrigger: Bool = false
 
     var body: some View {
-        ZStack {
-            VisualEffectView()
-                .ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                if vaultManager.isVaultConfigured {
-                    mainContent
-                } else {
-                    VaultSetupView(vaultManager: vaultManager)
-                }
+        VStack(spacing: 0) {
+            if vaultManager.isVaultConfigured {
+                mainContent
+            } else {
+                VaultSetupView(vaultManager: vaultManager)
             }
         }
+        .background(Monokai.background)
         .frame(minWidth: 320, minHeight: 300)
         .onChange(of: panelController.isVisible) {
             if panelController.isVisible {

@@ -39,7 +39,7 @@ struct SettingsView: View {
                 Spacer()
             }
             .padding(.vertical, 10)
-            .background(Monokai.toolbarBackground.opacity(0.9))
+            .background(Monokai.toolbarBackground)
         }
     }
 
