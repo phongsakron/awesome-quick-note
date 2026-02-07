@@ -12,6 +12,7 @@ struct HighlightResult {
         let language: String?
         let codeContent: String
         let fullRange: NSRange
+        let codeRange: NSRange
     }
     struct ImageInfo {
         let source: String
@@ -233,10 +234,34 @@ private struct HighlightWalker: MarkupWalker {
             .backgroundColor: Monokai.codeBlockBgNS
         ], range: range)
 
+        // Calculate code content range (skip opening fence line, exclude closing fence)
+        let nsText = textStorage.string as NSString
+        let blockText = nsText.substring(with: range)
+        let codeContent = codeBlock.code
+
+        var codeRange = range  // fallback
+        if let firstNewline = blockText.firstIndex(of: "\n") {
+            let offset = blockText.distance(from: blockText.startIndex, to: firstNewline) + 1
+            let codeStart = range.location + offset
+            let codeLength = (codeContent as NSString).length
+            if codeStart + codeLength <= range.location + range.length {
+                codeRange = NSRange(location: codeStart, length: codeLength)
+            }
+        }
+
+        // Apply syntax highlighting colors
+        CodeBlockSyntaxHighlighter.shared.highlight(
+            code: codeContent,
+            language: codeBlock.language,
+            in: textStorage,
+            at: codeRange
+        )
+
         result.codeBlocks.append(HighlightResult.CodeBlockInfo(
             language: codeBlock.language,
-            codeContent: codeBlock.code,
-            fullRange: range
+            codeContent: codeContent,
+            fullRange: range,
+            codeRange: codeRange
         ))
     }
 

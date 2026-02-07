@@ -79,11 +79,13 @@ final class EditorOverlayManager {
         for overlay in copyOverlays {
             guard overlay.range.location + overlay.range.length <= textLength else {
                 overlay.button.isHidden = true
+                overlay.formatButton?.isHidden = true
                 continue
             }
             let glyphRange = layoutManager.glyphRange(forCharacterRange: overlay.range, actualCharacterRange: nil)
             guard glyphRange.location != NSNotFound else {
                 overlay.button.isHidden = true
+                overlay.formatButton?.isHidden = true
                 continue
             }
             let boundingRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
@@ -99,6 +101,18 @@ final class EditorOverlayManager {
                 height: buttonSize.height
             )
             overlay.button.isHidden = false
+
+            if let formatButton = overlay.formatButton {
+                let formatSize = formatButton.fittingSize
+                let formatX = overlay.button.frame.minX - formatSize.width - 4
+                formatButton.frame = NSRect(
+                    x: max(formatX, boundingRect.minX + containerOrigin.width),
+                    y: y,
+                    width: formatSize.width,
+                    height: formatSize.height
+                )
+                formatButton.isHidden = false
+            }
         }
 
         for overlay in imageOverlays {
@@ -140,6 +154,7 @@ final class EditorOverlayManager {
     func clearOverlays() {
         for overlay in copyOverlays {
             overlay.button.removeFromSuperview()
+            overlay.formatButton?.removeFromSuperview()
         }
         copyOverlays.removeAll()
 
@@ -357,6 +372,7 @@ final class EditorOverlayManager {
         guard glyphRange.location != NSNotFound else { return }
         let boundingRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
 
+        // Copy button (right-most)
         let button = NSButton(frame: .zero)
         let label = codeBlock.language ?? "Copy"
         button.title = label
@@ -385,7 +401,55 @@ final class EditorOverlayManager {
         )
 
         textView.addSubview(button)
-        copyOverlays.append(CopyOverlay(button: button, target: target, range: codeBlock.fullRange))
+
+        // Format button (left of copy button) — only for supported languages
+        var formatBtn: NSButton?
+        var formatTgt: FormatButtonTarget?
+
+        if let lang = codeBlock.language?.lowercased(),
+           CodeFormatter.supportedLanguages.contains(lang) {
+            let fButton = NSButton(frame: .zero)
+            fButton.title = "Format"
+            fButton.bezelStyle = .inline
+            fButton.isBordered = true
+            fButton.font = NSFont.systemFont(ofSize: 10, weight: .medium)
+            fButton.contentTintColor = Monokai.foregroundNS
+            fButton.wantsLayer = true
+            fButton.layer?.backgroundColor = Monokai.codeBlockHeaderBgNS.cgColor
+            fButton.layer?.cornerRadius = 4
+            fButton.sizeToFit()
+
+            let fTarget = FormatButtonTarget(
+                codeRange: codeBlock.codeRange,
+                language: lang,
+                textView: textView,
+                button: fButton
+            )
+            fButton.target = fTarget
+            fButton.action = #selector(FormatButtonTarget.formatAction(_:))
+
+            let fSize = fButton.fittingSize
+            let fX = button.frame.minX - fSize.width - 4
+
+            fButton.frame = NSRect(
+                x: max(fX, boundingRect.minX + containerOrigin.width),
+                y: y,
+                width: fSize.width,
+                height: fSize.height
+            )
+
+            textView.addSubview(fButton)
+            formatBtn = fButton
+            formatTgt = fTarget
+        }
+
+        copyOverlays.append(CopyOverlay(
+            button: button,
+            target: target,
+            formatButton: formatBtn,
+            formatTarget: formatTgt,
+            range: codeBlock.fullRange
+        ))
     }
 
     // MARK: - Image Action Button Helper
@@ -451,6 +515,8 @@ final class EditorOverlayManager {
 private struct CopyOverlay {
     let button: NSButton
     let target: CopyButtonTarget
+    let formatButton: NSButton?
+    let formatTarget: FormatButtonTarget?
     let range: NSRange
 }
 
@@ -491,6 +557,38 @@ private final class ImageButtonTarget: NSObject {
         sender.title = "\u{2713}"
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             self?.copyButton?.title = "Copy"
+        }
+    }
+}
+
+// MARK: - Format Button Target
+
+private final class FormatButtonTarget: NSObject {
+    let codeRange: NSRange
+    let language: String
+    weak var textView: NSTextView?
+    weak var button: NSButton?
+
+    init(codeRange: NSRange, language: String, textView: NSTextView, button: NSButton) {
+        self.codeRange = codeRange
+        self.language = language
+        self.textView = textView
+        self.button = button
+    }
+
+    @objc func formatAction(_ sender: NSButton) {
+        guard let textView, let textStorage = textView.textStorage else { return }
+        let currentCode = (textStorage.string as NSString).substring(with: codeRange)
+        guard let formatted = CodeFormatter.format(code: currentCode, language: language) else { return }
+
+        if textView.shouldChangeText(in: codeRange, replacementString: formatted) {
+            textView.replaceCharacters(in: codeRange, with: formatted)
+            textView.didChangeText()
+        }
+
+        sender.title = "\u{2713}"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            self?.button?.title = "Format"
         }
     }
 }
