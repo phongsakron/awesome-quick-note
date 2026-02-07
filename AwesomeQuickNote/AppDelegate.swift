@@ -7,14 +7,16 @@ extension KeyboardShortcuts.Name {
     static let newNote = Self("newNote", default: .init(.n, modifiers: [.command, .option]))
     static let searchNotes = Self("searchNotes", default: .init(.f, modifiers: [.command, .shift]))
     static let resetPosition = Self("resetPosition", default: .init(.r, modifiers: [.command, .shift]))
+    static let togglePin = Self("togglePin", default: .init(.p, modifiers: [.command, .option]))
 }
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let vaultManager = VaultManager()
     let panelController = FloatingPanelController()
-    let searchManager = SearchManager()
+    let pinManager = PinManager()
     let fontSettings = FontSettings()
+    lazy var searchManager = SearchManager(pinManager: pinManager, vaultURL: { [weak self] in self?.vaultManager.vaultURL })
     lazy var imageManager = ImageManager(vaultManager: vaultManager)
 
     private var panel: FloatingPanel?
@@ -35,7 +37,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             panelController: panelController,
             searchManager: searchManager,
             imageManager: imageManager,
-            fontSettings: fontSettings
+            fontSettings: fontSettings,
+            pinManager: pinManager
         )
         .environment(\.colorScheme, .dark)
 
@@ -78,6 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         KeyboardShortcuts.disable(.newNote)
         KeyboardShortcuts.disable(.searchNotes)
         KeyboardShortcuts.disable(.resetPosition)
+        KeyboardShortcuts.disable(.togglePin)
     }
 
     private func handleLocalShortcut(_ event: NSEvent) -> Bool {
@@ -93,6 +97,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if shortcut == KeyboardShortcuts.getShortcut(for: .resetPosition) {
             panelController.resetPosition()
+            return true
+        }
+        if shortcut == KeyboardShortcuts.getShortcut(for: .togglePin) {
+            panelController.togglePinSelectedNote()
             return true
         }
 

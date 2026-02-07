@@ -9,6 +9,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     var isSearchActive: Bool = false
     var isSettingsActive: Bool = false
     var pendingNewNote: Bool = false
+    var togglePinTrigger: Bool = false
 
     private var panel: FloatingPanel?
 
@@ -66,6 +67,11 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     func dismissOverlays() {
         isSearchActive = false
         isSettingsActive = false
+    }
+
+    func togglePinSelectedNote() {
+        guard isSearchActive else { return }
+        togglePinTrigger.toggle()
     }
 
     func moveToPosition(_ position: PanelPosition) {

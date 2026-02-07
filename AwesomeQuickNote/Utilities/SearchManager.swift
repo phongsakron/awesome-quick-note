@@ -9,12 +9,19 @@ final class SearchManager {
     var results: [Note] = []
 
     private let fuse = Fuse(threshold: 0.4)
+    private let pinManager: PinManager
+    private let vaultURL: () -> URL?
+
+    init(pinManager: PinManager, vaultURL: @escaping () -> URL?) {
+        self.pinManager = pinManager
+        self.vaultURL = vaultURL
+    }
 
     func search(in notes: [Note]) {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !trimmed.isEmpty else {
-            results = notes.sorted { $0.modifiedAt > $1.modifiedAt }
+            results = pinManager.sortNotes(notes, vaultURL: vaultURL())
             return
         }
 
@@ -32,7 +39,11 @@ final class SearchManager {
             return nil
         }
 
-        results = scored.sorted { $0.1 == $1.1 ? $0.0.modifiedAt > $1.0.modifiedAt : $0.1 < $1.1 }.map(\.0)
+        let sorted = scored.sorted { $0.1 == $1.1 ? $0.0.modifiedAt > $1.0.modifiedAt : $0.1 < $1.1 }.map(\.0)
+        let url = vaultURL()
+        let pinned = sorted.filter { pinManager.isPinned($0, vaultURL: url) }
+        let unpinned = sorted.filter { !pinManager.isPinned($0, vaultURL: url) }
+        results = pinned + unpinned
     }
 
     func clear() {

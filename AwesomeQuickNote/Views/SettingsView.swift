@@ -55,6 +55,7 @@ struct SettingsView: View {
             shortcutRow("Toggle Panel", name: .togglePanel)
             shortcutRow("New Note", name: .newNote)
             shortcutRow("Search Notes", name: .searchNotes)
+            shortcutRow("Toggle Pin", name: .togglePin)
             shortcutRow("Reset Position", name: .resetPosition)
         }
         .padding(12)

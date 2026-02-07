@@ -3,11 +3,14 @@ import SwiftUI
 struct SearchView: View {
     let searchManager: SearchManager
     let notes: [Note]
+    let panelController: FloatingPanelController
+    let pinManager: PinManager
+    let vaultURL: URL?
     var onSelectNote: (Note) -> Void
     var onDismiss: () -> Void
 
     @State private var queryText: String = ""
-    @State private var selectedIndex: Int = 0
+    @State private var selectedNote: Note?
     @FocusState private var isSearchFieldFocused: Bool
 
     var body: some View {
@@ -18,7 +21,7 @@ struct SearchView: View {
         }
         .onAppear {
             searchManager.search(in: notes)
-            selectedIndex = 0
+            selectedNote = searchManager.results.first
             DispatchQueue.main.async {
                 isSearchFieldFocused = true
             }
@@ -27,7 +30,17 @@ struct SearchView: View {
             searchManager.clear()
         }
         .onChange(of: searchManager.results) {
-            selectedIndex = 0
+            if let current = selectedNote,
+               searchManager.results.contains(where: { $0.id == current.id }) {
+                // keep current selection
+            } else {
+                selectedNote = searchManager.results.first
+            }
+        }
+        .onChange(of: panelController.togglePinTrigger) {
+            guard let note = selectedNote else { return }
+            pinManager.togglePin(note, vaultURL: vaultURL)
+            searchManager.search(in: notes)
         }
     }
 
@@ -43,21 +56,16 @@ struct SearchView: View {
                 .foregroundStyle(Monokai.foreground)
                 .focused($isSearchFieldFocused)
                 .onSubmit {
-                    if !searchManager.results.isEmpty {
-                        let note = searchManager.results[selectedIndex]
+                    if let note = selectedNote {
                         selectNote(note)
                     }
                 }
                 .onKeyPress(.downArrow) {
-                    if !searchManager.results.isEmpty {
-                        selectedIndex = min(selectedIndex + 1, searchManager.results.count - 1)
-                    }
+                    moveSelection(by: 1)
                     return .handled
                 }
                 .onKeyPress(.upArrow) {
-                    if !searchManager.results.isEmpty {
-                        selectedIndex = max(selectedIndex - 1, 0)
-                    }
+                    moveSelection(by: -1)
                     return .handled
                 }
                 .onKeyPress(.escape) {
@@ -97,9 +105,15 @@ struct SearchView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 2) {
-                    ForEach(Array(searchManager.results.enumerated()), id: \.element.id) { index, note in
+                    ForEach(searchManager.results) { note in
                         Button(action: { selectNote(note) }) {
-                            HStack {
+                            HStack(spacing: 6) {
+                                if pinManager.isPinned(note, vaultURL: vaultURL) {
+                                    Image(systemName: "pin.fill")
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(Monokai.keyword)
+                                }
+
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(note.title)
                                         .font(.system(size: 13, weight: .medium))
@@ -123,18 +137,29 @@ struct SearchView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .background(index == selectedIndex ? Monokai.tabActiveBackground : Color.clear)
+                        .background(selectedNote?.id == note.id ? Monokai.tabActiveBackground : Color.clear)
                         .clipShape(.rect(cornerRadius: 4))
-                        .id(index)
+                        .id(note.id)
                     }
                 }
                 .padding(.vertical, 4)
             }
             .scrollIndicators(.hidden)
-            .onChange(of: selectedIndex) {
-                proxy.scrollTo(selectedIndex, anchor: .center)
+            .onChange(of: selectedNote) {
+                if let id = selectedNote?.id {
+                    proxy.scrollTo(id, anchor: .center)
+                }
             }
         }
+    }
+
+    private func moveSelection(by offset: Int) {
+        let results = searchManager.results
+        guard !results.isEmpty else { return }
+
+        let currentIndex = results.firstIndex(where: { $0.id == selectedNote?.id }) ?? 0
+        let newIndex = max(0, min(currentIndex + offset, results.count - 1))
+        selectedNote = results[newIndex]
     }
 
     private func selectNote(_ note: Note) {

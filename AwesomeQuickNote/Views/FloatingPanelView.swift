@@ -6,6 +6,7 @@ struct FloatingPanelView: View {
     let searchManager: SearchManager
     let imageManager: ImageManager
     let fontSettings: FontSettings
+    let pinManager: PinManager
 
     @State private var selectedNote: Note?
     @State private var editingContent: String = ""
@@ -73,6 +74,9 @@ struct FloatingPanelView: View {
             SearchView(
                 searchManager: searchManager,
                 notes: vaultManager.notes,
+                panelController: panelController,
+                pinManager: pinManager,
+                vaultURL: vaultManager.vaultURL,
                 onSelectNote: selectNote,
                 onDismiss: dismissOverlays
             )
