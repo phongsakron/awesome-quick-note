@@ -28,9 +28,18 @@ final class EditorOverlayManager {
             addCopyButton(for: codeBlock, in: textView)
         }
 
-        // Add inline images
+        // Batch all textStorage modifications for images in a single editing session
+        let hasImages = result.images.contains { resolveImage(source: $0.source) != nil }
+        if hasImages {
+            textView.textStorage?.beginEditing()
+        }
+
         for imageInfo in result.images {
             addInlineImage(for: imageInfo, in: textView)
+        }
+
+        if hasImages {
+            textView.textStorage?.endEditing()
         }
     }
 

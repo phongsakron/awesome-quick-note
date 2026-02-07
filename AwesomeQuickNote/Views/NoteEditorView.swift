@@ -78,6 +78,7 @@ struct NoteEditorView: NSViewRepresentable {
         guard let textView = scrollView.documentView as? NSTextView else { return }
 
         let coordinator = context.coordinator
+
         let fontChanged = coordinator.currentFontFamily != fontSettings.fontFamily
             || coordinator.currentFontSize != fontSettings.fontSize
 
@@ -90,18 +91,21 @@ struct NoteEditorView: NSViewRepresentable {
             coordinator.highlighter.updateFonts(from: fontSettings)
             textView.font = fontSettings.editorFont()
 
+            let selectedRanges = textView.selectedRanges
             coordinator.overlayManager.clearOverlays()
             let result = coordinator.highlighter.highlight(textView.textStorage!)
             coordinator.overlayManager.updateOverlays(from: result)
+            textView.selectedRanges = selectedRanges
         }
 
-        if textView.string != text {
-            let selectedRanges = textView.selectedRanges
+        // Only reset text when the editor has no pending unsaved changes.
+        // During typing, textView.string is ahead of the binding (debounce lag).
+        // Resetting here would overwrite the user's latest keystrokes and jump the cursor.
+        if textView.string != text && !coordinator.isEditorDirty {
             coordinator.overlayManager.clearOverlays()
             textView.string = text
             let result = coordinator.highlighter.highlight(textView.textStorage!)
             coordinator.overlayManager.updateOverlays(from: result)
-            textView.selectedRanges = selectedRanges
         }
 
         if shouldFocus && !coordinator.hasFocused {
@@ -124,6 +128,9 @@ struct NoteEditorView: NSViewRepresentable {
         let overlayManager = EditorOverlayManager()
         var currentFontFamily: String
         var currentFontSize: CGFloat
+        /// True between textDidChange and debounce completion.
+        /// Prevents updateNSView from resetting textView.string while the user is typing.
+        var isEditorDirty = false
         private var debounceTask: Task<Void, Never>?
 
         init(_ parent: NoteEditorView) {
@@ -136,17 +143,25 @@ struct NoteEditorView: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
 
+            // Save cursor position before highlighting
+            let selectedRanges = textView.selectedRanges
+
             overlayManager.clearOverlays()
             let result = highlighter.highlight(textView.textStorage!)
             overlayManager.updateOverlays(from: result)
 
+            // Restore cursor position after highlighting
+            textView.selectedRanges = selectedRanges
+
             let newText = textView.string
+            isEditorDirty = true
 
             debounceTask?.cancel()
             debounceTask = Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(100))
                 guard !Task.isCancelled else { return }
                 self.parent.text = newText
+                self.isEditorDirty = false
             }
         }
 
