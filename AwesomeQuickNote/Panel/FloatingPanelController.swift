@@ -124,9 +124,9 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         }
     }
 
-    nonisolated func windowWillClose(_ notification: Notification) {
-        Task { @MainActor in
-            isVisible = false
-        }
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        sender.orderOut(nil)
+        isVisible = false
+        return false
     }
 }
