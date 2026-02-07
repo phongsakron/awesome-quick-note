@@ -19,7 +19,12 @@ jobs:
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
       - name: Build release binary
-        run: swift build -c release
+        run: |
+          swift --version
+          swift build -c release
+          BIN_PATH=$(swift build -c release --show-bin-path)
+          echo "BIN_PATH=$BIN_PATH" >> "$GITHUB_ENV"
+          echo "Build output:" && ls "$BIN_PATH"/*.bundle || echo "No bundles found"
 
       - name: Assemble .app bundle
         run: |
@@ -28,22 +33,28 @@ jobs:
           mkdir -p "$APP/Contents/Resources"
 
           # Copy binary
-          cp .build/release/AwesomeQuickNote "$APP/Contents/MacOS/"
+          cp "$BIN_PATH/AwesomeQuickNote" "$APP/Contents/MacOS/"
 
-          # Copy Info.plist and stamp version from tag
+          # Copy Info.plist, add CFBundleExecutable, and stamp version from tag
           cp Info.plist "$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleExecutable string AwesomeQuickNote" "$APP/Contents/Info.plist" 2>/dev/null || \
+          /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable AwesomeQuickNote" "$APP/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ steps.version.outputs.VERSION }}" "$APP/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ steps.version.outputs.VERSION }}" "$APP/Contents/Info.plist"
 
-          # Copy SPM resource bundle if present
-          if [ -d ".build/release/AwesomeQuickNote_AwesomeQuickNote.bundle" ]; then
-            cp -R ".build/release/AwesomeQuickNote_AwesomeQuickNote.bundle" "$APP/Contents/Resources/"
-          fi
+          # PkgInfo
+          echo -n "APPL????" > "$APP/Contents/PkgInfo"
 
-          # Copy any other resource bundles (e.g. KeyboardShortcuts)
-          for bundle in .build/release/*.bundle; do
+          # Copy all SPM resource bundles
+          for bundle in "$BIN_PATH"/*.bundle; do
             [ -d "$bundle" ] && cp -R "$bundle" "$APP/Contents/Resources/"
           done
+
+          echo "App bundle contents:"
+          find "$APP" -maxdepth 3 -type d
+
+      - name: Ad-hoc code sign
+        run: codesign --force --deep --sign - AwesomeQuickNote.app
 
       - name: Zip app
         run: ditto -c -k --keepParent AwesomeQuickNote.app AwesomeQuickNote-${{ steps.version.outputs.VERSION }}-macos.zip
