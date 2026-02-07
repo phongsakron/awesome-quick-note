@@ -56,12 +56,17 @@ jobs:
       - name: Ad-hoc code sign
         run: codesign --force --deep --sign - AwesomeQuickNote.app
 
-      - name: Zip app
-        run: ditto -c -k --keepParent AwesomeQuickNote.app AwesomeQuickNote-${{ steps.version.outputs.VERSION }}-macos.zip
+      - name: Create DMG
+        run: |
+          DMG_NAME="AwesomeQuickNote-${{ steps.version.outputs.VERSION }}-macos"
+          mkdir -p dmg-stage
+          cp -R AwesomeQuickNote.app dmg-stage/
+          ln -s /Applications dmg-stage/Applications
+          hdiutil create -volname "AwesomeQuickNote" -srcfolder dmg-stage -ov -format UDZO "$DMG_NAME.dmg"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: v${{ steps.version.outputs.VERSION }}
           generate_release_notes: true
-          files: AwesomeQuickNote-${{ steps.version.outputs.VERSION }}-macos.zip
+          files: AwesomeQuickNote-${{ steps.version.outputs.VERSION }}-macos.dmg
