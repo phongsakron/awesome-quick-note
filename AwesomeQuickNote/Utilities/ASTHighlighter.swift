@@ -4,6 +4,7 @@ import Markdown
 extension NSAttributedString.Key {
     static let checkboxRange = NSAttributedString.Key("checkboxRange")
     static let markdownLink = NSAttributedString.Key("markdownLink")
+    static let markdownImageSource = NSAttributedString.Key("markdownImageSource")
 }
 
 struct HighlightResult {
@@ -289,16 +290,19 @@ private struct HighlightWalker: MarkupWalker {
             return
         }
 
-        textStorage.addAttributes([
+        var attrs: [NSAttributedString.Key: Any] = [
             .foregroundColor: Monokai.typeNS
-        ], range: range)
+        ]
 
         if let source = image.source {
+            attrs[.markdownImageSource] = source
             result.images.append(HighlightResult.ImageInfo(
                 source: source,
                 range: range
             ))
         }
+
+        textStorage.addAttributes(attrs, range: range)
     }
 
     // MARK: - Block Quote

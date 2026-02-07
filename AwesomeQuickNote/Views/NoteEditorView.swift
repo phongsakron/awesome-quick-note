@@ -21,6 +21,7 @@ struct NoteEditorView: NSViewRepresentable {
         let textView = MarkdownNSTextView()
         textView.delegate = context.coordinator
         textView.onImagePaste = onImagePaste
+        textView.vaultURL = vaultURL
         textView.isEditable = true
         textView.isSelectable = true
         textView.allowsUndo = true
@@ -88,6 +89,7 @@ struct NoteEditorView: NSViewRepresentable {
             || coordinator.currentFontSize != fontSettings.fontSize
 
         coordinator.overlayManager.updateVaultURL(vaultURL)
+        (scrollView.documentView as? MarkdownNSTextView)?.vaultURL = vaultURL
 
         if fontChanged {
             coordinator.currentFontFamily = fontSettings.fontFamily
@@ -188,6 +190,7 @@ struct NoteEditorView: NSViewRepresentable {
 
 final class MarkdownNSTextView: NSTextView {
     var onImagePaste: ((NSImage) -> String?)?
+    var vaultURL: URL?
 
     override func paste(_ sender: Any?) {
         let pasteboard = NSPasteboard.general
@@ -246,6 +249,22 @@ final class MarkdownNSTextView: NSTextView {
            let urlString = textStorage?.attribute(.markdownLink, at: charIndex, effectiveRange: nil) as? String,
            let url = URL(string: urlString) {
             NSWorkspace.shared.open(url)
+            return
+        }
+
+        // Cmd+Click to open images
+        if event.modifierFlags.contains(.command),
+           let source = textStorage?.attribute(.markdownImageSource, at: charIndex, effectiveRange: nil) as? String {
+            if let url = URL(string: source), url.scheme != nil {
+                NSWorkspace.shared.open(url)
+            } else if let vaultURL {
+                let fileURL = vaultURL.appendingPathComponent(source)
+                if FileManager.default.fileExists(atPath: fileURL.path) {
+                    NSWorkspace.shared.open(fileURL)
+                }
+            } else if FileManager.default.fileExists(atPath: source) {
+                NSWorkspace.shared.open(URL(fileURLWithPath: source))
+            }
             return
         }
 

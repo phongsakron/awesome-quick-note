@@ -60,6 +60,8 @@ final class EditorOverlayManager {
         // Clear image overlays only (keep copy buttons)
         for overlay in imageOverlays {
             overlay.imageView.removeFromSuperview()
+            overlay.openButton.removeFromSuperview()
+            overlay.copyButton.removeFromSuperview()
         }
         imageOverlays.removeAll()
 
@@ -102,11 +104,15 @@ final class EditorOverlayManager {
         for overlay in imageOverlays {
             guard overlay.range.location + overlay.range.length <= textLength else {
                 overlay.imageView.isHidden = true
+                overlay.openButton.isHidden = true
+                overlay.copyButton.isHidden = true
                 continue
             }
             let glyphRange = layoutManager.glyphRange(forCharacterRange: overlay.range, actualCharacterRange: nil)
             guard glyphRange.location != NSNotFound else {
                 overlay.imageView.isHidden = true
+                overlay.openButton.isHidden = true
+                overlay.copyButton.isHidden = true
                 continue
             }
             let boundingRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
@@ -118,6 +124,16 @@ final class EditorOverlayManager {
                                               width: overlay.displaySize.width,
                                               height: overlay.displaySize.height)
             overlay.imageView.isHidden = false
+
+            let openSize = overlay.openButton.fittingSize
+            let copySize = overlay.copyButton.fittingSize
+            let btnY = y + 4
+            let btnX = x + overlay.displaySize.width - openSize.width - copySize.width - 12
+
+            overlay.openButton.frame = NSRect(x: btnX, y: btnY, width: openSize.width, height: openSize.height)
+            overlay.copyButton.frame = NSRect(x: btnX + openSize.width + 4, y: btnY, width: copySize.width, height: copySize.height)
+            overlay.openButton.isHidden = false
+            overlay.copyButton.isHidden = false
         }
     }
 
@@ -129,6 +145,8 @@ final class EditorOverlayManager {
 
         for overlay in imageOverlays {
             overlay.imageView.removeFromSuperview()
+            overlay.openButton.removeFromSuperview()
+            overlay.copyButton.removeFromSuperview()
         }
         imageOverlays.removeAll()
         editingImageLines.removeAll()
@@ -278,22 +296,45 @@ final class EditorOverlayManager {
             let displayWidth = img.size.width * scale
             let displayHeight = img.size.height * scale
 
-            let imageView = NSImageView(frame: NSRect(
-                x: boundingRect.minX + containerOrigin.width,
-                y: boundingRect.maxY + containerOrigin.height + 4,
-                width: displayWidth,
-                height: displayHeight
-            ))
+            let x = boundingRect.minX + containerOrigin.width
+            let y = boundingRect.maxY + containerOrigin.height + 4
+
+            let imageView = NSImageView(frame: NSRect(x: x, y: y, width: displayWidth, height: displayHeight))
             imageView.image = img
             imageView.imageScaling = .scaleProportionallyUpOrDown
             imageView.wantsLayer = true
             imageView.layer?.cornerRadius = 4
             imageView.layer?.masksToBounds = true
 
+            // Resolve file URL for open/copy actions
+            let resolvedURL = resolveImageURL(source: imageInfo.source)
+
+            let openButton = makeImageActionButton(title: "Open")
+            let copyButton = makeImageActionButton(title: "Copy")
+
+            let target = ImageButtonTarget(image: img, fileURL: resolvedURL, openButton: openButton, copyButton: copyButton)
+            openButton.target = target
+            openButton.action = #selector(ImageButtonTarget.openAction(_:))
+            copyButton.target = target
+            copyButton.action = #selector(ImageButtonTarget.copyAction(_:))
+
+            let openSize = openButton.fittingSize
+            let copySize = copyButton.fittingSize
+            let btnY = y + 4
+            let btnX = x + displayWidth - openSize.width - copySize.width - 12
+
+            openButton.frame = NSRect(x: btnX, y: btnY, width: openSize.width, height: openSize.height)
+            copyButton.frame = NSRect(x: btnX + openSize.width + 4, y: btnY, width: copySize.width, height: copySize.height)
+
             textView.addSubview(imageView)
+            textView.addSubview(openButton)
+            textView.addSubview(copyButton)
 
             imageOverlays.append(ImageOverlay(
                 imageView: imageView,
+                openButton: openButton,
+                copyButton: copyButton,
+                target: target,
                 range: imageInfo.range,
                 displaySize: NSSize(width: displayWidth, height: displayHeight)
             ))
@@ -347,6 +388,38 @@ final class EditorOverlayManager {
         copyOverlays.append(CopyOverlay(button: button, target: target, range: codeBlock.fullRange))
     }
 
+    // MARK: - Image Action Button Helper
+
+    private func makeImageActionButton(title: String) -> NSButton {
+        let button = NSButton(frame: .zero)
+        button.title = title
+        button.bezelStyle = .inline
+        button.isBordered = true
+        button.font = NSFont.systemFont(ofSize: 10, weight: .medium)
+        button.contentTintColor = Monokai.foregroundNS
+        button.wantsLayer = true
+        button.layer?.backgroundColor = Monokai.codeBlockHeaderBgNS.cgColor
+        button.layer?.cornerRadius = 4
+        button.sizeToFit()
+        return button
+    }
+
+    private func resolveImageURL(source: String) -> URL? {
+        if let url = URL(string: source), url.scheme != nil {
+            return url
+        }
+        if let vaultURL {
+            let fileURL = vaultURL.appendingPathComponent(source)
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                return fileURL
+            }
+        }
+        if FileManager.default.fileExists(atPath: source) {
+            return URL(fileURLWithPath: source)
+        }
+        return nil
+    }
+
     // MARK: - Image Resolution
 
     private func resolveOrCacheImage(source: String) -> NSImage? {
@@ -383,8 +456,43 @@ private struct CopyOverlay {
 
 private struct ImageOverlay {
     let imageView: NSImageView
+    let openButton: NSButton
+    let copyButton: NSButton
+    let target: ImageButtonTarget
     let range: NSRange
     let displaySize: NSSize
+}
+
+// MARK: - Image Button Target
+
+private final class ImageButtonTarget: NSObject {
+    let image: NSImage
+    let fileURL: URL?
+    weak var openButton: NSButton?
+    weak var copyButton: NSButton?
+
+    init(image: NSImage, fileURL: URL?, openButton: NSButton, copyButton: NSButton) {
+        self.image = image
+        self.fileURL = fileURL
+        self.openButton = openButton
+        self.copyButton = copyButton
+    }
+
+    @objc func openAction(_ sender: NSButton) {
+        if let fileURL {
+            NSWorkspace.shared.open(fileURL)
+        }
+    }
+
+    @objc func copyAction(_ sender: NSButton) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.writeObjects([image])
+
+        sender.title = "\u{2713}"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            self?.copyButton?.title = "Copy"
+        }
+    }
 }
 
 // MARK: - Copy Button Target
