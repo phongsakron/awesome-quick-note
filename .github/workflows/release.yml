@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build release binary
+        run: swift build -c release
+
+      - name: Assemble .app bundle
+        run: |
+          APP="AwesomeQuickNote.app"
+          mkdir -p "$APP/Contents/MacOS"
+          mkdir -p "$APP/Contents/Resources"
+
+          # Copy binary
+          cp .build/release/AwesomeQuickNote "$APP/Contents/MacOS/"
+
+          # Copy Info.plist and stamp version from tag
+          cp Info.plist "$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ steps.version.outputs.VERSION }}" "$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ steps.version.outputs.VERSION }}" "$APP/Contents/Info.plist"
+
+          # Copy SPM resource bundle if present
+          if [ -d ".build/release/AwesomeQuickNote_AwesomeQuickNote.bundle" ]; then
+            cp -R ".build/release/AwesomeQuickNote_AwesomeQuickNote.bundle" "$APP/Contents/Resources/"
+          fi
+
+          # Copy any other resource bundles (e.g. KeyboardShortcuts)
+          for bundle in .build/release/*.bundle; do
+            [ -d "$bundle" ] && cp -R "$bundle" "$APP/Contents/Resources/"
+          done
+
+      - name: Zip app
+        run: ditto -c -k --keepParent AwesomeQuickNote.app AwesomeQuickNote-${{ steps.version.outputs.VERSION }}-macos.zip
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ steps.version.outputs.VERSION }}
+          generate_release_notes: true
+          files: AwesomeQuickNote-${{ steps.version.outputs.VERSION }}-macos.zip
