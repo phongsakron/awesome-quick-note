@@ -45,7 +45,17 @@ I wanted a simple floating note app for macOS. SideNote costs money. Raycast Not
 
 All shortcuts are customizable in Settings.
 
-## Build
+## Install
+
+Download the latest `.zip` from [Releases](../../releases), unzip, then remove the quarantine flag because the app is not code-signed (I'm not paying Apple $99/year for a vibe-coded app):
+
+```bash
+xattr -cr AwesomeQuickNote.app
+```
+
+Then drag it to `/Applications` and open it.
+
+## Build from source
 
 ```bash
 swift build
