@@ -104,6 +104,23 @@ struct SettingsView: View {
                     positionButton(.bottomRight)
                 }
             }
+
+            Divider().background(Monokai.border)
+
+            HStack {
+                Text("Opacity")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Monokai.foreground)
+                    .frame(width: 110, alignment: .leading)
+
+                Slider(value: Bindable(panelController).panelOpacity, in: 0.3...1.0, step: 0.05)
+                    .frame(maxWidth: .infinity)
+
+                Text("\(Int(panelController.panelOpacity * 100))%")
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(Monokai.comment)
+                    .frame(width: 40, alignment: .trailing)
+            }
         }
         .padding(12)
         .background(Monokai.tabBackground.opacity(0.5))

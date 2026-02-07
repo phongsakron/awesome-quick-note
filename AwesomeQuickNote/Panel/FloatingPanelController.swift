@@ -11,6 +11,13 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     var pendingNewNote: Bool = false
     var togglePinTrigger: Bool = false
 
+    var panelOpacity: CGFloat = UserDefaults.standard.object(forKey: "panelOpacity") as? CGFloat ?? 1.0 {
+        didSet {
+            panel?.alphaValue = panelOpacity
+            UserDefaults.standard.set(panelOpacity, forKey: "panelOpacity")
+        }
+    }
+
     private var panel: FloatingPanel?
 
     private static let frameKey = "panelFrame"
@@ -18,6 +25,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     func setPanel(_ panel: FloatingPanel) {
         self.panel = panel
         panel.delegate = self
+        panel.alphaValue = panelOpacity
         restoreFrame()
     }
 

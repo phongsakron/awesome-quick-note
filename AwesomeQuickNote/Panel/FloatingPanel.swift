@@ -19,7 +19,7 @@ final class FloatingPanel: NSPanel {
         hidesOnDeactivate = false
         titleVisibility = .hidden
         titlebarAppearsTransparent = true
-        isOpaque = true
+        isOpaque = false
         backgroundColor = NSColor(hex: 0x272822)
         animationBehavior = .utilityWindow
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
