@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SettingsView: View {
     let vaultManager: VaultManager
+    let panelController: FloatingPanelController
     @Bindable var fontSettings: FontSettings
     var onDismiss: () -> Void
 
@@ -11,6 +12,11 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 20) {
                 sectionHeader("Keyboard Shortcuts")
                 shortcutsSection
+
+                Divider().background(Monokai.border)
+
+                sectionHeader("Panel")
+                panelSection
 
                 Divider().background(Monokai.border)
 
@@ -72,6 +78,54 @@ struct SettingsView: View {
 
             KeyboardShortcuts.Recorder(for: name)
                 .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var panelSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Position")
+                .font(.system(size: 13))
+                .foregroundStyle(Monokai.foreground)
+
+            Grid(horizontalSpacing: 6, verticalSpacing: 6) {
+                GridRow {
+                    positionButton(.topLeft)
+                    positionButton(nil)
+                    positionButton(.topRight)
+                }
+                GridRow {
+                    positionButton(.left)
+                    positionButton(.center)
+                    positionButton(.right)
+                }
+                GridRow {
+                    positionButton(.bottomLeft)
+                    positionButton(nil)
+                    positionButton(.bottomRight)
+                }
+            }
+        }
+        .padding(12)
+        .background(Monokai.tabBackground.opacity(0.5))
+        .clipShape(.rect(cornerRadius: 8))
+    }
+
+    private func positionButton(_ position: PanelPosition?) -> some View {
+        Group {
+            if let position {
+                Button(action: { panelController.moveToPosition(position) }) {
+                    Text(position.displayName)
+                        .font(.system(size: 11))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.bordered)
+                .tint(Monokai.function)
+            } else {
+                Color.clear
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 30)
+            }
         }
     }
 

@@ -68,7 +68,7 @@ struct FloatingPanelView: View {
         Divider().background(Monokai.border)
 
         if panelController.isSettingsActive {
-            SettingsView(vaultManager: vaultManager, fontSettings: fontSettings, onDismiss: dismissOverlays)
+            SettingsView(vaultManager: vaultManager, panelController: panelController, fontSettings: fontSettings, onDismiss: dismissOverlays)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if panelController.isSearchActive {
             SearchView(
