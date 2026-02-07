@@ -47,11 +47,17 @@ struct NoteEditorView: NSViewRepresentable {
         coordinator.textView = textView
         coordinator.overlayManager.configure(textView: textView, vaultURL: vaultURL)
 
+        // Highlight immediately for text colors
         let result = coordinator.highlighter.highlight(textView.textStorage!)
-        let cursor = textView.selectedRange().location
-        coordinator.overlayManager.updateOverlays(from: result, cursorLocation: cursor)
 
         scrollView.documentView = textView
+
+        // Defer overlay building until the view has its final layout width
+        // (textContainer width is 0 at this point, causing tiny images)
+        DispatchQueue.main.async {
+            let cursor = textView.selectedRange().location
+            coordinator.overlayManager.updateOverlays(from: result, cursorLocation: cursor)
+        }
 
         // Observe scroll for repositioning overlays
         scrollView.contentView.postsBoundsChangedNotifications = true
