@@ -69,7 +69,7 @@ final class VaultManager {
     private func saveBookmark(for url: URL) {
         do {
             let bookmarkData = try url.bookmarkData(
-                options: [.withSecurityScope],
+                options: [],
                 includingResourceValuesForKeys: nil,
                 relativeTo: nil
             )
@@ -86,12 +86,10 @@ final class VaultManager {
             var isStale = false
             let url = try URL(
                 resolvingBookmarkData: bookmarkData,
-                options: [.withSecurityScope],
+                options: [],
                 relativeTo: nil,
                 bookmarkDataIsStale: &isStale
             )
-
-            guard url.startAccessingSecurityScopedResource() else { return }
 
             if isStale {
                 saveBookmark(for: url)
