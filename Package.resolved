@@ -1,5 +1,5 @@
 {
-  "originHash" : "35bb1ed5b154f65aac55d0d6e1577af892d232fc0b67ccc3d6d727095514e1e0",
+  "originHash" : "237472150c5d20747e0f77255a1c8faf5e1ecee49857eeecd6d810f789c16a6f",
   "pins" : [
     {
       "identity" : "fuse-swift",
@@ -35,6 +35,15 @@
       "state" : {
         "revision" : "5d9bdaa4228b381639fff09403e39a04926e2dbe",
         "version" : "0.7.1"
+      }
+    },
+    {
+      "identity" : "swift-markdown",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-markdown.git",
+      "state" : {
+        "revision" : "7d9a5ce307528578dfa777d505496bd5f544ad94",
+        "version" : "0.7.3"
       }
     },
     {

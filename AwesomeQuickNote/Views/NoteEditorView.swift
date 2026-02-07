@@ -5,6 +5,7 @@ struct NoteEditorView: NSViewRepresentable {
     var fontSettings: FontSettings
     var onImagePaste: ((NSImage) -> String?)?
     var shouldFocus: Bool = false
+    var vaultURL: URL? = nil
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -39,11 +40,36 @@ struct NoteEditorView: NSViewRepresentable {
         textView.textContainer?.widthTracksTextView = true
         textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
 
+        // Disable automatic link detection (we handle links ourselves)
+        textView.isAutomaticLinkDetectionEnabled = false
+
         textView.string = text
-        context.coordinator.highlighter.highlight(textView.textStorage!)
+
+        let coordinator = context.coordinator
+        coordinator.textView = textView
+        coordinator.overlayManager.configure(textView: textView, vaultURL: vaultURL)
+
+        let result = coordinator.highlighter.highlight(textView.textStorage!)
+        coordinator.overlayManager.updateOverlays(from: result)
 
         scrollView.documentView = textView
-        context.coordinator.textView = textView
+
+        // Observe scroll for repositioning overlays
+        scrollView.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            coordinator,
+            selector: #selector(Coordinator.scrollViewDidScroll(_:)),
+            name: NSView.boundsDidChangeNotification,
+            object: scrollView.contentView
+        )
+
+        // Observe frame changes for repositioning overlays
+        NotificationCenter.default.addObserver(
+            coordinator,
+            selector: #selector(Coordinator.textViewFrameDidChange(_:)),
+            name: NSView.frameDidChangeNotification,
+            object: textView
+        )
 
         return scrollView
     }
@@ -55,18 +81,26 @@ struct NoteEditorView: NSViewRepresentable {
         let fontChanged = coordinator.currentFontFamily != fontSettings.fontFamily
             || coordinator.currentFontSize != fontSettings.fontSize
 
+        // Update vault URL if changed
+        coordinator.overlayManager.updateVaultURL(vaultURL)
+
         if fontChanged {
             coordinator.currentFontFamily = fontSettings.fontFamily
             coordinator.currentFontSize = fontSettings.fontSize
             coordinator.highlighter.updateFonts(from: fontSettings)
             textView.font = fontSettings.editorFont()
-            coordinator.highlighter.highlight(textView.textStorage!)
+
+            coordinator.overlayManager.clearOverlays()
+            let result = coordinator.highlighter.highlight(textView.textStorage!)
+            coordinator.overlayManager.updateOverlays(from: result)
         }
 
         if textView.string != text {
             let selectedRanges = textView.selectedRanges
+            coordinator.overlayManager.clearOverlays()
             textView.string = text
-            coordinator.highlighter.highlight(textView.textStorage!)
+            let result = coordinator.highlighter.highlight(textView.textStorage!)
+            coordinator.overlayManager.updateOverlays(from: result)
             textView.selectedRanges = selectedRanges
         }
 
@@ -86,14 +120,15 @@ struct NoteEditorView: NSViewRepresentable {
         var parent: NoteEditorView
         weak var textView: NSTextView?
         var hasFocused = false
-        let highlighter: MarkdownHighlighter
+        let highlighter: ASTHighlighter
+        let overlayManager = EditorOverlayManager()
         var currentFontFamily: String
         var currentFontSize: CGFloat
         private var debounceTask: Task<Void, Never>?
 
         init(_ parent: NoteEditorView) {
             self.parent = parent
-            self.highlighter = MarkdownHighlighter(fontSettings: parent.fontSettings)
+            self.highlighter = ASTHighlighter(fontSettings: parent.fontSettings)
             self.currentFontFamily = parent.fontSettings.fontFamily
             self.currentFontSize = parent.fontSettings.fontSize
         }
@@ -101,7 +136,9 @@ struct NoteEditorView: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
 
-            highlighter.highlight(textView.textStorage!)
+            overlayManager.clearOverlays()
+            let result = highlighter.highlight(textView.textStorage!)
+            overlayManager.updateOverlays(from: result)
 
             let newText = textView.string
 
@@ -111,6 +148,18 @@ struct NoteEditorView: NSViewRepresentable {
                 guard !Task.isCancelled else { return }
                 self.parent.text = newText
             }
+        }
+
+        @objc func scrollViewDidScroll(_ notification: Notification) {
+            overlayManager.repositionOverlays()
+        }
+
+        @objc func textViewFrameDidChange(_ notification: Notification) {
+            overlayManager.repositionOverlays()
+        }
+
+        deinit {
+            NotificationCenter.default.removeObserver(self)
         }
     }
 }
@@ -172,6 +221,15 @@ final class MarkdownNSTextView: NSTextView {
             return
         }
 
+        // Cmd+Click to open links
+        if event.modifierFlags.contains(.command),
+           let urlString = textStorage?.attribute(.link, at: charIndex, effectiveRange: nil) as? String,
+           let url = URL(string: urlString) {
+            NSWorkspace.shared.open(url)
+            return
+        }
+
+        // Click to toggle checkboxes
         if let checkboxRange = textStorage?.attribute(.checkboxRange, at: charIndex, effectiveRange: nil) as? NSRange {
             toggleCheckbox(at: checkboxRange)
             return

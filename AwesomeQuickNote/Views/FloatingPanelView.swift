@@ -95,7 +95,8 @@ struct FloatingPanelView: View {
             onImagePaste: { image in
                 imageManager.saveImage(image)
             },
-            shouldFocus: editorFocusTrigger
+            shouldFocus: editorFocusTrigger,
+            vaultURL: vaultManager.vaultURL
         )
     }
 

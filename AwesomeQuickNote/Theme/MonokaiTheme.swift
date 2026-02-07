@@ -19,6 +19,7 @@ enum Monokai {
     static let numberNS = NSColor(hex: 0xAE81FF)
     static let commentNS = NSColor(hex: 0x75715E)
     static let codeBlockBgNS = NSColor(hex: 0x1E1F1C)
+    static let codeBlockHeaderBgNS = NSColor(hex: 0x1E1F1C, alpha: 0.8)
     static let inlineCodeBgNS = NSColor(hex: 0x3E3D32)
 
     static let panelBackground = Color(hex: 0x272822)

@@ -11,6 +11,7 @@ let package = Package(
         .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", from: "2.0.0"),
         .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", from: "2.4.0"),
         .package(url: "https://github.com/krisk/fuse-swift", from: "1.4.0"),
+        .package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.4.0"),
     ],
     targets: [
         .executableTarget(
@@ -19,6 +20,7 @@ let package = Package(
                 "KeyboardShortcuts",
                 .product(name: "MarkdownUI", package: "swift-markdown-ui"),
                 .product(name: "Fuse", package: "fuse-swift"),
+                .product(name: "Markdown", package: "swift-markdown"),
             ],
             path: "AwesomeQuickNote",
             resources: [
