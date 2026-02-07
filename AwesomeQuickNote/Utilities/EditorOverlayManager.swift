@@ -8,6 +8,11 @@ final class EditorOverlayManager {
     private var imageOverlays: [ImageOverlay] = []
     private var imageCache: [String: NSImage] = [:]
 
+    /// Cached result from last highlight pass, used for selection-change updates
+    private(set) var lastResult: HighlightResult?
+    /// Set of image line locations currently in "edit mode" (cursor on line)
+    private var editingImageLines: Set<Int> = []
+
     func configure(textView: NSTextView, vaultURL: URL?) {
         self.textView = textView
         self.vaultURL = vaultURL
@@ -17,30 +22,49 @@ final class EditorOverlayManager {
         self.vaultURL = url
     }
 
-    func updateOverlays(from result: HighlightResult) {
+    // MARK: - Full Update (after highlighting)
+
+    func updateOverlays(from result: HighlightResult, cursorLocation: Int) {
+        self.lastResult = result
         guard let textView else { return }
 
-        // Remove stale overlays
         clearOverlays()
+        rebuildAllOverlays(in: textView, result: result, cursorLocation: cursorLocation)
+    }
 
-        // Add code block copy buttons
-        for codeBlock in result.codeBlocks {
-            addCopyButton(for: codeBlock, in: textView)
-        }
+    // MARK: - Selection Change (lightweight — no re-highlight)
 
-        // Batch all textStorage modifications for images in a single editing session
-        let hasImages = result.images.contains { resolveImage(source: $0.source) != nil }
-        if hasImages {
-            textView.textStorage?.beginEditing()
-        }
+    func updateForSelectionChange(cursorLocation: Int) {
+        guard let textView, let result = lastResult else { return }
+        guard !result.images.isEmpty else { return }
 
+        let textLength = (textView.string as NSString).length
+        let nsText = textView.string as NSString
+        let cursorLineRange = cursorLocation < textLength
+            ? nsText.lineRange(for: NSRange(location: cursorLocation, length: 0))
+            : NSRange(location: textLength, length: 0)
+
+        // Determine which image lines now have the cursor
+        var newEditingLines = Set<Int>()
         for imageInfo in result.images {
-            addInlineImage(for: imageInfo, in: textView)
+            guard imageInfo.range.location + imageInfo.range.length <= textLength else { continue }
+            let imageLineRange = nsText.lineRange(for: imageInfo.range)
+            if NSIntersectionRange(cursorLineRange, imageLineRange).length > 0 {
+                newEditingLines.insert(imageLineRange.location)
+            }
         }
 
-        if hasImages {
-            textView.textStorage?.endEditing()
+        // Only rebuild if the set of editing lines changed
+        guard newEditingLines != editingImageLines else { return }
+
+        // Clear image overlays only (keep copy buttons)
+        for overlay in imageOverlays {
+            overlay.imageView.removeFromSuperview()
         }
+        imageOverlays.removeAll()
+
+        // Rebuild image overlays with new cursor state
+        rebuildImageOverlays(in: textView, result: result, cursorLocation: cursorLocation)
     }
 
     func repositionOverlays() {
@@ -48,13 +72,18 @@ final class EditorOverlayManager {
               let textContainer = textView.textContainer else { return }
 
         let containerOrigin = textView.textContainerInset
+        let textLength = (textView.string as NSString).length
 
         for overlay in copyOverlays {
-            guard overlay.range.location + overlay.range.length <= (textView.string as NSString).length else {
+            guard overlay.range.location + overlay.range.length <= textLength else {
                 overlay.button.isHidden = true
                 continue
             }
             let glyphRange = layoutManager.glyphRange(forCharacterRange: overlay.range, actualCharacterRange: nil)
+            guard glyphRange.location != NSNotFound else {
+                overlay.button.isHidden = true
+                continue
+            }
             let boundingRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
 
             let buttonSize = overlay.button.fittingSize
@@ -71,23 +100,23 @@ final class EditorOverlayManager {
         }
 
         for overlay in imageOverlays {
-            guard overlay.range.location + overlay.range.length <= (textView.string as NSString).length else {
+            guard overlay.range.location + overlay.range.length <= textLength else {
                 overlay.imageView.isHidden = true
                 continue
             }
             let glyphRange = layoutManager.glyphRange(forCharacterRange: overlay.range, actualCharacterRange: nil)
+            guard glyphRange.location != NSNotFound else {
+                overlay.imageView.isHidden = true
+                continue
+            }
             let boundingRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
-
-            let maxWidth = textContainer.containerSize.width - 24
-            let imageSize = overlay.originalSize
-            let scale = min(maxWidth / imageSize.width, 200 / imageSize.height, 1.0)
-            let displayWidth = imageSize.width * scale
-            let displayHeight = imageSize.height * scale
 
             let x = boundingRect.minX + containerOrigin.width
             let y = boundingRect.maxY + containerOrigin.height + 4
 
-            overlay.imageView.frame = NSRect(x: x, y: y, width: displayWidth, height: displayHeight)
+            overlay.imageView.frame = NSRect(x: x, y: y,
+                                              width: overlay.displaySize.width,
+                                              height: overlay.displaySize.height)
             overlay.imageView.isHidden = false
         }
     }
@@ -102,15 +131,190 @@ final class EditorOverlayManager {
             overlay.imageView.removeFromSuperview()
         }
         imageOverlays.removeAll()
+        editingImageLines.removeAll()
+    }
+
+    // MARK: - Private: Build All Overlays
+
+    private func rebuildAllOverlays(in textView: NSTextView, result: HighlightResult, cursorLocation: Int) {
+        guard let layoutManager = textView.layoutManager,
+              let textContainer = textView.textContainer else { return }
+
+        let textLength = (textView.string as NSString).length
+
+        // Phase 1: Apply textStorage changes for image lines (hide text + add spacing)
+        rebuildImageAttributes(in: textView, result: result, cursorLocation: cursorLocation)
+
+        // Phase 2: Layout is now valid — position overlays
+        layoutManager.ensureLayout(for: textContainer)
+        let containerOrigin = textView.textContainerInset
+
+        // Copy buttons
+        for codeBlock in result.codeBlocks {
+            addCopyButton(for: codeBlock, in: textView, layoutManager: layoutManager,
+                          textContainer: textContainer, containerOrigin: containerOrigin,
+                          textLength: textLength)
+        }
+
+        // Image overlays (only for non-editing lines)
+        positionImageOverlays(in: textView, result: result, layoutManager: layoutManager,
+                              textContainer: textContainer, containerOrigin: containerOrigin,
+                              textLength: textLength)
+    }
+
+    // MARK: - Private: Rebuild Image Overlays Only
+
+    private func rebuildImageOverlays(in textView: NSTextView, result: HighlightResult, cursorLocation: Int) {
+        guard let layoutManager = textView.layoutManager,
+              let textContainer = textView.textContainer else { return }
+
+        let textLength = (textView.string as NSString).length
+
+        // Phase 1: Apply textStorage changes
+        rebuildImageAttributes(in: textView, result: result, cursorLocation: cursorLocation)
+
+        // Phase 2: Position image overlays
+        layoutManager.ensureLayout(for: textContainer)
+        let containerOrigin = textView.textContainerInset
+
+        positionImageOverlays(in: textView, result: result, layoutManager: layoutManager,
+                              textContainer: textContainer, containerOrigin: containerOrigin,
+                              textLength: textLength)
+    }
+
+    // MARK: - Phase 1: TextStorage Changes for Images
+
+    private func rebuildImageAttributes(in textView: NSTextView, result: HighlightResult, cursorLocation: Int) {
+        let textLength = (textView.string as NSString).length
+        let nsText = textView.string as NSString
+        guard let textContainer = textView.textContainer else { return }
+
+        let cursorLineRange = cursorLocation < textLength
+            ? nsText.lineRange(for: NSRange(location: cursorLocation, length: 0))
+            : NSRange(location: textLength, length: 0)
+
+        editingImageLines.removeAll()
+
+        var hasChanges = false
+
+        for imageInfo in result.images {
+            guard imageInfo.range.location + imageInfo.range.length <= textLength else { continue }
+            guard let img = resolveOrCacheImage(source: imageInfo.source) else { continue }
+            guard img.size.width > 0, img.size.height > 0 else { continue }
+
+            let imageLineRange = nsText.lineRange(for: imageInfo.range)
+            let cursorOnLine = NSIntersectionRange(cursorLineRange, imageLineRange).length > 0
+
+            if cursorOnLine {
+                // Edit mode: cursor is on this line — text stays visible, no image
+                editingImageLines.insert(imageLineRange.location)
+
+                // Restore foreground color + remove paragraph spacing
+                // (may have been set to .clear by a previous preview-mode pass)
+                if !hasChanges {
+                    textView.textStorage?.beginEditing()
+                    hasChanges = true
+                }
+                textView.textStorage?.addAttribute(.foregroundColor, value: Monokai.typeNS,
+                                                    range: imageLineRange)
+                let defaultStyle = NSMutableParagraphStyle()
+                defaultStyle.paragraphSpacing = 0
+                textView.textStorage?.addAttribute(.paragraphStyle, value: defaultStyle,
+                                                    range: imageLineRange)
+            } else {
+                // Preview mode: hide text, add spacing for rendered image
+                if !hasChanges {
+                    textView.textStorage?.beginEditing()
+                    hasChanges = true
+                }
+
+                // Make the markdown text invisible
+                textView.textStorage?.addAttribute(.foregroundColor, value: NSColor.clear,
+                                                    range: imageLineRange)
+
+                // Add paragraph spacing to make room for the image
+                let maxWidth = textContainer.containerSize.width - 24
+                let scale = min(maxWidth / img.size.width, 200 / img.size.height, 1.0)
+                let displayHeight = img.size.height * scale
+                let style = NSMutableParagraphStyle()
+                style.paragraphSpacing = displayHeight + 8
+                textView.textStorage?.addAttribute(.paragraphStyle, value: style, range: imageLineRange)
+            }
+        }
+
+        if hasChanges {
+            textView.textStorage?.endEditing()
+        }
+    }
+
+    // MARK: - Phase 2: Position Image Overlays
+
+    private func positionImageOverlays(
+        in textView: NSTextView,
+        result: HighlightResult,
+        layoutManager: NSLayoutManager,
+        textContainer: NSTextContainer,
+        containerOrigin: NSSize,
+        textLength: Int
+    ) {
+        let nsText = textView.string as NSString
+
+        for imageInfo in result.images {
+            guard imageInfo.range.location + imageInfo.range.length <= textLength else { continue }
+            guard let img = resolveOrCacheImage(source: imageInfo.source) else { continue }
+            guard img.size.width > 0, img.size.height > 0 else { continue }
+
+            let imageLineRange = nsText.lineRange(for: imageInfo.range)
+
+            // Skip images on the editing line (cursor is there — show text only)
+            if editingImageLines.contains(imageLineRange.location) { continue }
+
+            let glyphRange = layoutManager.glyphRange(forCharacterRange: imageInfo.range, actualCharacterRange: nil)
+            guard glyphRange.location != NSNotFound else { continue }
+            let boundingRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+
+            let maxWidth = textContainer.containerSize.width - 24
+            let scale = min(maxWidth / img.size.width, 200 / img.size.height, 1.0)
+            let displayWidth = img.size.width * scale
+            let displayHeight = img.size.height * scale
+
+            let imageView = NSImageView(frame: NSRect(
+                x: boundingRect.minX + containerOrigin.width,
+                y: boundingRect.maxY + containerOrigin.height + 4,
+                width: displayWidth,
+                height: displayHeight
+            ))
+            imageView.image = img
+            imageView.imageScaling = .scaleProportionallyUpOrDown
+            imageView.wantsLayer = true
+            imageView.layer?.cornerRadius = 4
+            imageView.layer?.masksToBounds = true
+
+            textView.addSubview(imageView)
+
+            imageOverlays.append(ImageOverlay(
+                imageView: imageView,
+                range: imageInfo.range,
+                displaySize: NSSize(width: displayWidth, height: displayHeight)
+            ))
+        }
     }
 
     // MARK: - Code Block Copy Button
 
-    private func addCopyButton(for codeBlock: HighlightResult.CodeBlockInfo, in textView: NSTextView) {
-        guard let layoutManager = textView.layoutManager,
-              let textContainer = textView.textContainer else { return }
+    private func addCopyButton(
+        for codeBlock: HighlightResult.CodeBlockInfo,
+        in textView: NSTextView,
+        layoutManager: NSLayoutManager,
+        textContainer: NSTextContainer,
+        containerOrigin: NSSize,
+        textLength: Int
+    ) {
+        guard codeBlock.fullRange.location + codeBlock.fullRange.length <= textLength else { return }
 
-        guard codeBlock.fullRange.location + codeBlock.fullRange.length <= (textView.string as NSString).length else { return }
+        let glyphRange = layoutManager.glyphRange(forCharacterRange: codeBlock.fullRange, actualCharacterRange: nil)
+        guard glyphRange.location != NSNotFound else { return }
+        let boundingRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
 
         let button = NSButton(frame: .zero)
         let label = codeBlock.language ?? "Copy"
@@ -124,17 +328,9 @@ final class EditorOverlayManager {
         button.layer?.cornerRadius = 4
         button.sizeToFit()
 
-        let codeContent = codeBlock.codeContent
-        button.target = nil
-        button.action = #selector(CopyButtonTarget.copyAction(_:))
-
-        let target = CopyButtonTarget(codeContent: codeContent, button: button, originalLabel: label)
+        let target = CopyButtonTarget(codeContent: codeBlock.codeContent, button: button, originalLabel: label)
         button.target = target
-
-        // Position the button
-        let containerOrigin = textView.textContainerInset
-        let glyphRange = layoutManager.glyphRange(forCharacterRange: codeBlock.fullRange, actualCharacterRange: nil)
-        let boundingRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+        button.action = #selector(CopyButtonTarget.copyAction(_:))
 
         let buttonSize = button.fittingSize
         let x = boundingRect.maxX + containerOrigin.width - buttonSize.width - 8
@@ -148,90 +344,31 @@ final class EditorOverlayManager {
         )
 
         textView.addSubview(button)
-
-        let overlay = CopyOverlay(button: button, target: target, range: codeBlock.fullRange)
-        copyOverlays.append(overlay)
+        copyOverlays.append(CopyOverlay(button: button, target: target, range: codeBlock.fullRange))
     }
 
-    // MARK: - Inline Image
+    // MARK: - Image Resolution
 
-    private func addInlineImage(for imageInfo: HighlightResult.ImageInfo, in textView: NSTextView) {
-        guard let layoutManager = textView.layoutManager,
-              let textContainer = textView.textContainer else { return }
-
-        guard imageInfo.range.location + imageInfo.range.length <= (textView.string as NSString).length else { return }
-
-        // Resolve image path
-        let image: NSImage?
-        if let cached = imageCache[imageInfo.source] {
-            image = cached
-        } else {
-            image = resolveImage(source: imageInfo.source)
-            if let image {
-                imageCache[imageInfo.source] = image
-            }
-        }
-
-        guard let image else { return }
-
-        let containerOrigin = textView.textContainerInset
-        let glyphRange = layoutManager.glyphRange(forCharacterRange: imageInfo.range, actualCharacterRange: nil)
-        let boundingRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
-
-        let maxWidth = textContainer.containerSize.width - 24
-        let imageSize = image.size
-        let scale = min(maxWidth / imageSize.width, 200 / imageSize.height, 1.0)
-        let displayWidth = imageSize.width * scale
-        let displayHeight = imageSize.height * scale
-
-        let imageView = NSImageView(frame: NSRect(
-            x: boundingRect.minX + containerOrigin.width,
-            y: boundingRect.maxY + containerOrigin.height + 4,
-            width: displayWidth,
-            height: displayHeight
-        ))
-        imageView.image = image
-        imageView.imageScaling = .scaleProportionallyUpOrDown
-        imageView.wantsLayer = true
-        imageView.layer?.cornerRadius = 4
-        imageView.layer?.masksToBounds = true
-
-        textView.addSubview(imageView)
-
-        // Add paragraph spacing after the image line to make room
-        let nsText = textView.string as NSString
-        let lineRange = nsText.lineRange(for: imageInfo.range)
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.paragraphSpacing = displayHeight + 8
-        textView.textStorage?.addAttribute(.paragraphStyle, value: paragraphStyle, range: lineRange)
-
-        let overlay = ImageOverlay(
-            imageView: imageView,
-            range: imageInfo.range,
-            originalSize: imageSize
-        )
-        imageOverlays.append(overlay)
+    private func resolveOrCacheImage(source: String) -> NSImage? {
+        if let cached = imageCache[source] { return cached }
+        let img = resolveImage(source: source)
+        if let img { imageCache[source] = img }
+        return img
     }
 
     private func resolveImage(source: String) -> NSImage? {
-        // Try as absolute URL first
         if let url = URL(string: source), url.scheme != nil {
             return NSImage(contentsOf: url)
         }
-
-        // Try relative to vault
         if let vaultURL {
             let fileURL = vaultURL.appendingPathComponent(source)
             if FileManager.default.fileExists(atPath: fileURL.path) {
                 return NSImage(contentsOf: fileURL)
             }
         }
-
-        // Try as file path directly
         if FileManager.default.fileExists(atPath: source) {
             return NSImage(contentsOfFile: source)
         }
-
         return nil
     }
 }
@@ -247,7 +384,7 @@ private struct CopyOverlay {
 private struct ImageOverlay {
     let imageView: NSImageView
     let range: NSRange
-    let originalSize: NSSize
+    let displaySize: NSSize
 }
 
 // MARK: - Copy Button Target
@@ -267,7 +404,6 @@ private final class CopyButtonTarget: NSObject {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(codeContent, forType: .string)
 
-        // Show checkmark feedback
         sender.title = "\u{2713}"
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             guard let self, let button = self.button else { return }

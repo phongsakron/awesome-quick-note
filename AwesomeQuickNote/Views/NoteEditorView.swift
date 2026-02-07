@@ -33,15 +33,13 @@ struct NoteEditorView: NSViewRepresentable {
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticTextReplacementEnabled = false
         textView.isAutomaticSpellingCorrectionEnabled = false
+        textView.isAutomaticLinkDetectionEnabled = false
         textView.textContainerInset = NSSize(width: 12, height: 12)
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
         textView.textContainer?.widthTracksTextView = true
         textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
-
-        // Disable automatic link detection (we handle links ourselves)
-        textView.isAutomaticLinkDetectionEnabled = false
 
         textView.string = text
 
@@ -50,7 +48,8 @@ struct NoteEditorView: NSViewRepresentable {
         coordinator.overlayManager.configure(textView: textView, vaultURL: vaultURL)
 
         let result = coordinator.highlighter.highlight(textView.textStorage!)
-        coordinator.overlayManager.updateOverlays(from: result)
+        let cursor = textView.selectedRange().location
+        coordinator.overlayManager.updateOverlays(from: result, cursorLocation: cursor)
 
         scrollView.documentView = textView
 
@@ -82,7 +81,6 @@ struct NoteEditorView: NSViewRepresentable {
         let fontChanged = coordinator.currentFontFamily != fontSettings.fontFamily
             || coordinator.currentFontSize != fontSettings.fontSize
 
-        // Update vault URL if changed
         coordinator.overlayManager.updateVaultURL(vaultURL)
 
         if fontChanged {
@@ -94,18 +92,18 @@ struct NoteEditorView: NSViewRepresentable {
             let selectedRanges = textView.selectedRanges
             coordinator.overlayManager.clearOverlays()
             let result = coordinator.highlighter.highlight(textView.textStorage!)
-            coordinator.overlayManager.updateOverlays(from: result)
+            let cursor = textView.selectedRange().location
+            coordinator.overlayManager.updateOverlays(from: result, cursorLocation: cursor)
             textView.selectedRanges = selectedRanges
         }
 
         // Only reset text when the editor has no pending unsaved changes.
-        // During typing, textView.string is ahead of the binding (debounce lag).
-        // Resetting here would overwrite the user's latest keystrokes and jump the cursor.
         if textView.string != text && !coordinator.isEditorDirty {
             coordinator.overlayManager.clearOverlays()
             textView.string = text
             let result = coordinator.highlighter.highlight(textView.textStorage!)
-            coordinator.overlayManager.updateOverlays(from: result)
+            let cursor = textView.selectedRange().location
+            coordinator.overlayManager.updateOverlays(from: result, cursorLocation: cursor)
         }
 
         if shouldFocus && !coordinator.hasFocused {
@@ -128,8 +126,6 @@ struct NoteEditorView: NSViewRepresentable {
         let overlayManager = EditorOverlayManager()
         var currentFontFamily: String
         var currentFontSize: CGFloat
-        /// True between textDidChange and debounce completion.
-        /// Prevents updateNSView from resetting textView.string while the user is typing.
         var isEditorDirty = false
         private var debounceTask: Task<Void, Never>?
 
@@ -143,14 +139,13 @@ struct NoteEditorView: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
 
-            // Save cursor position before highlighting
             let selectedRanges = textView.selectedRanges
 
             overlayManager.clearOverlays()
             let result = highlighter.highlight(textView.textStorage!)
-            overlayManager.updateOverlays(from: result)
+            let cursor = textView.selectedRange().location
+            overlayManager.updateOverlays(from: result, cursorLocation: cursor)
 
-            // Restore cursor position after highlighting
             textView.selectedRanges = selectedRanges
 
             let newText = textView.string
@@ -163,6 +158,12 @@ struct NoteEditorView: NSViewRepresentable {
                 self.parent.text = newText
                 self.isEditorDirty = false
             }
+        }
+
+        func textViewDidChangeSelection(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            let cursor = textView.selectedRange().location
+            overlayManager.updateForSelectionChange(cursorLocation: cursor)
         }
 
         @objc func scrollViewDidScroll(_ notification: Notification) {
@@ -185,7 +186,6 @@ final class MarkdownNSTextView: NSTextView {
     override func paste(_ sender: Any?) {
         let pasteboard = NSPasteboard.general
 
-        // Check for image paste first
         if let image = NSImage(pasteboard: pasteboard),
            let onImagePaste,
            let markdown = onImagePaste(image) {
@@ -193,7 +193,6 @@ final class MarkdownNSTextView: NSTextView {
             return
         }
 
-        // Strip rich text: extract plain string only
         if let plainString = pasteboard.string(forType: .string) {
             insertText(plainString, replacementRange: selectedRange())
             return
@@ -238,7 +237,7 @@ final class MarkdownNSTextView: NSTextView {
 
         // Cmd+Click to open links
         if event.modifierFlags.contains(.command),
-           let urlString = textStorage?.attribute(.link, at: charIndex, effectiveRange: nil) as? String,
+           let urlString = textStorage?.attribute(.markdownLink, at: charIndex, effectiveRange: nil) as? String,
            let url = URL(string: urlString) {
             NSWorkspace.shared.open(url)
             return

@@ -3,6 +3,7 @@ import Markdown
 
 extension NSAttributedString.Key {
     static let checkboxRange = NSAttributedString.Key("checkboxRange")
+    static let markdownLink = NSAttributedString.Key("markdownLink")
 }
 
 struct HighlightResult {
@@ -269,8 +270,10 @@ private struct HighlightWalker: MarkupWalker {
             .underlineStyle: NSUnderlineStyle.single.rawValue
         ]
 
+        // Use custom attribute instead of .link to avoid NSTextView's
+        // internal link handling which can crash during drawing
         if let destination = link.destination {
-            attrs[.link] = destination
+            attrs[.markdownLink] = destination
         }
 
         textStorage.addAttributes(attrs, range: range)
