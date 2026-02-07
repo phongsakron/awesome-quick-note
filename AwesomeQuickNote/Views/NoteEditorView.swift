@@ -35,6 +35,8 @@ struct NoteEditorView: NSViewRepresentable {
         textView.isAutomaticTextReplacementEnabled = false
         textView.isAutomaticSpellingCorrectionEnabled = false
         textView.isAutomaticLinkDetectionEnabled = false
+        textView.usesFindBar = true
+        textView.isIncrementalSearchingEnabled = true
         textView.textContainerInset = NSSize(width: 12, height: 12)
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
@@ -192,6 +194,25 @@ final class MarkdownNSTextView: NSTextView {
     var onImagePaste: ((NSImage) -> String?)?
     var vaultURL: URL?
 
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if flags == .command, let chars = event.charactersIgnoringModifiers {
+            if chars == "f" {
+                let item = NSMenuItem()
+                item.tag = Int(NSTextFinder.Action.showFindInterface.rawValue)
+                performTextFinderAction(item)
+                return true
+            }
+            if chars == "h" {
+                let item = NSMenuItem()
+                item.tag = Int(NSTextFinder.Action.showReplaceInterface.rawValue)
+                performTextFinderAction(item)
+                return true
+            }
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
     override func paste(_ sender: Any?) {
         let pasteboard = NSPasteboard.general
 
@@ -275,6 +296,77 @@ final class MarkdownNSTextView: NSTextView {
         }
 
         super.mouseDown(with: event)
+    }
+
+    override func insertNewline(_ sender: Any?) {
+        let nsString = string as NSString
+        let cursorLocation = selectedRange().location
+        let lineRange = nsString.lineRange(for: NSRange(location: cursorLocation, length: 0))
+        let lineText = nsString.substring(with: lineRange)
+        let trimmedLine = lineText.hasSuffix("\n") ? String(lineText.dropLast()) : lineText
+
+        // Only continue list if cursor is at end of line
+        let lineEnd = lineRange.location + (lineText.hasSuffix("\n") ? lineRange.length - 1 : lineRange.length)
+        guard cursorLocation == lineEnd else {
+            super.insertNewline(sender)
+            return
+        }
+
+        // Try checkbox: "  - [ ] text" or "  - [x] text"
+        if let regex = try? NSRegularExpression(pattern: #"^(\s*)([-*+])\s+\[[ xX]\]\s+(.*)"#),
+           let match = regex.firstMatch(in: trimmedLine, range: NSRange(0..<trimmedLine.utf16.count)) {
+            let indent = substringOf(trimmedLine, range: match.range(at: 1))
+            let bullet = substringOf(trimmedLine, range: match.range(at: 2))
+            let content = substringOf(trimmedLine, range: match.range(at: 3))
+            if content.trimmingCharacters(in: .whitespaces).isEmpty {
+                removeMarker(lineRange: lineRange, lineText: lineText)
+            } else {
+                insertText("\n\(indent)\(bullet) [ ] ", replacementRange: selectedRange())
+            }
+            return
+        }
+
+        // Try ordered: "  1. text"
+        if let regex = try? NSRegularExpression(pattern: #"^(\s*)(\d+)\.\s+(.*)"#),
+           let match = regex.firstMatch(in: trimmedLine, range: NSRange(0..<trimmedLine.utf16.count)) {
+            let indent = substringOf(trimmedLine, range: match.range(at: 1))
+            let number = Int(substringOf(trimmedLine, range: match.range(at: 2))) ?? 1
+            let content = substringOf(trimmedLine, range: match.range(at: 3))
+            if content.trimmingCharacters(in: .whitespaces).isEmpty {
+                removeMarker(lineRange: lineRange, lineText: lineText)
+            } else {
+                insertText("\n\(indent)\(number + 1). ", replacementRange: selectedRange())
+            }
+            return
+        }
+
+        // Try unordered: "  - text"
+        if let regex = try? NSRegularExpression(pattern: #"^(\s*[-*+]\s+)(.*)"#),
+           let match = regex.firstMatch(in: trimmedLine, range: NSRange(0..<trimmedLine.utf16.count)) {
+            let marker = substringOf(trimmedLine, range: match.range(at: 1))
+            let content = substringOf(trimmedLine, range: match.range(at: 2))
+            if content.trimmingCharacters(in: .whitespaces).isEmpty {
+                removeMarker(lineRange: lineRange, lineText: lineText)
+            } else {
+                insertText("\n\(marker)", replacementRange: selectedRange())
+            }
+            return
+        }
+
+        super.insertNewline(sender)
+    }
+
+    private func substringOf(_ string: String, range: NSRange) -> String {
+        (string as NSString).substring(with: range)
+    }
+
+    private func removeMarker(lineRange: NSRange, lineText: String) {
+        let contentLength = lineText.hasSuffix("\n") ? lineRange.length - 1 : lineRange.length
+        let contentRange = NSRange(location: lineRange.location, length: contentLength)
+        if shouldChangeText(in: contentRange, replacementString: "") {
+            replaceCharacters(in: contentRange, with: "")
+            didChangeText()
+        }
     }
 
     private func toggleCheckbox(at range: NSRange) {
