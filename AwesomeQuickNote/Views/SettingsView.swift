@@ -3,7 +3,7 @@ import SwiftUI
 
 struct SettingsView: View {
     let vaultManager: VaultManager
-    let panelController: FloatingPanelController
+    @Bindable var panelController: FloatingPanelController
     @Bindable var fontSettings: FontSettings
     var onDismiss: () -> Void
 
@@ -113,7 +113,7 @@ struct SettingsView: View {
                     .foregroundStyle(Monokai.foreground)
                     .frame(width: 110, alignment: .leading)
 
-                Slider(value: Bindable(panelController).panelOpacity, in: 0.3...1.0, step: 0.05)
+                Slider(value: $panelController.panelOpacity, in: 0.3...1.0, step: 0.05)
                     .frame(maxWidth: .infinity)
 
                 Text("\(Int(panelController.panelOpacity * 100))%")
