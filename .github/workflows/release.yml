@@ -21,6 +21,45 @@ jobs:
       - name: Build release binary
         run: |
           swift --version
+
+          # Initial build to generate derived sources
+          swift build -c release
+
+          # Patch SPM-generated resource_bundle_accessor.swift files so Bundle.module
+          # also checks Bundle.main.resourceURL (Contents/Resources/ in .app bundles).
+          # SPM only checks Bundle.main.bundleURL which is the .app root — but macOS
+          # codesign forbids loose bundles there. This adds a resourceURL fallback.
+          for accessor in $(find .build -path "*/release/*.build/DerivedSources/resource_bundle_accessor.swift"); do
+            # Extract the bundle name (e.g. "KeyboardShortcuts_KeyboardShortcuts.bundle")
+            BUNDLE_NAME=$(grep 'appendingPathComponent(' "$accessor" | head -1 | sed 's/.*appendingPathComponent("\([^"]*\)").*/\1/')
+            if [ -n "$BUNDLE_NAME" ]; then
+              cat > "$accessor" << ACCESSOR
+          import Foundation
+
+          extension Foundation.Bundle {
+              static let module: Bundle = {
+                  let bundleName = "$BUNDLE_NAME"
+                  let candidates = [
+                      Bundle.main.bundleURL.appendingPathComponent(bundleName),
+                      Bundle.main.resourceURL?.appendingPathComponent(bundleName),
+                      Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/" + bundleName),
+                  ].compactMap { \$0 }
+
+                  for candidate in candidates {
+                      if let bundle = Bundle(path: candidate.path) {
+                          return bundle
+                      }
+                  }
+
+                  Swift.fatalError("could not load resource bundle: \(bundleName)")
+              }()
+          }
+          ACCESSOR
+              echo "Patched: $accessor ($BUNDLE_NAME)"
+            fi
+          done
+
+          # Rebuild with patched accessors
           swift build -c release
           BIN_PATH=$(swift build -c release --show-bin-path)
           echo "BIN_PATH=$BIN_PATH" >> "$GITHUB_ENV"
@@ -45,11 +84,9 @@ jobs:
           # PkgInfo
           echo -n "APPL????" > "$APP/Contents/PkgInfo"
 
-          # Copy all SPM resource bundles
-          # SPM's Bundle.module uses Bundle.main.bundleURL which resolves to the .app root,
-          # so bundles must be at the top level of the .app alongside Contents/
+          # Copy all SPM resource bundles into Contents/Resources/
           for bundle in "$BIN_PATH"/*.bundle; do
-            [ -d "$bundle" ] && cp -R "$bundle" "$APP/"
+            [ -d "$bundle" ] && cp -R "$bundle" "$APP/Contents/Resources/"
           done
 
           echo "App bundle contents:"
