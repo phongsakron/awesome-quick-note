@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ToolbarView: View {
+    let gitSyncManager: GitSyncManager
     var onNewNote: () -> Void
     var onSearch: () -> Void
     var onSettings: () -> Void
@@ -28,6 +29,8 @@ struct ToolbarView: View {
             .help("Search Notes")
 
             Spacer()
+
+            GitSyncStatusView(gitSyncManager: gitSyncManager)
 
             Button(action: onSettings) {
                 Image(systemName: "gearshape")

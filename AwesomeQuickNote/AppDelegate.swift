@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let panelController = FloatingPanelController()
     let pinManager = PinManager()
     let fontSettings = FontSettings()
+    let gitSyncManager = GitSyncManager()
     lazy var searchManager = SearchManager(pinManager: pinManager, vaultURL: { [weak self] in self?.vaultManager.vaultURL })
     lazy var imageManager = ImageManager(vaultManager: vaultManager)
 
@@ -29,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         setupPanel()
         setupKeyboardShortcuts()
+        gitSyncManager.configure(vaultURL: vaultManager.vaultURL)
     }
 
     private func setupPanel() {
@@ -38,7 +40,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             searchManager: searchManager,
             imageManager: imageManager,
             fontSettings: fontSettings,
-            pinManager: pinManager
+            pinManager: pinManager,
+            gitSyncManager: gitSyncManager
         )
         .environment(\.colorScheme, .dark)
 

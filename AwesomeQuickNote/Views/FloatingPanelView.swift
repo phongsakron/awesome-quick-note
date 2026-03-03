@@ -7,6 +7,7 @@ struct FloatingPanelView: View {
     let imageManager: ImageManager
     let fontSettings: FontSettings
     let pinManager: PinManager
+    let gitSyncManager: GitSyncManager
 
     @State private var selectedNote: Note?
     @State private var editingContent: String = ""
@@ -48,6 +49,9 @@ struct FloatingPanelView: View {
         .onChange(of: editingContent) {
             scheduleSave()
         }
+        .onChange(of: vaultManager.vaultURL) {
+            gitSyncManager.configure(vaultURL: vaultManager.vaultURL)
+        }
         .onAppear {
             if selectedNote == nil, let first = vaultManager.notes.first {
                 selectedNote = first
@@ -60,6 +64,7 @@ struct FloatingPanelView: View {
     @ViewBuilder
     private var mainContent: some View {
         ToolbarView(
+            gitSyncManager: gitSyncManager,
             onNewNote: handleNewNote,
             onSearch: handleSearch,
             onSettings: handleSettings
@@ -68,7 +73,7 @@ struct FloatingPanelView: View {
         Divider().background(Monokai.border)
 
         if panelController.isSettingsActive {
-            SettingsView(vaultManager: vaultManager, panelController: panelController, fontSettings: fontSettings, onDismiss: dismissOverlays)
+            SettingsView(vaultManager: vaultManager, panelController: panelController, fontSettings: fontSettings, gitSyncManager: gitSyncManager, onDismiss: dismissOverlays)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if panelController.isSearchActive {
             SearchView(
@@ -125,6 +130,7 @@ struct FloatingPanelView: View {
             selectedNote = note
             editingContent = note.content
             editorFocusTrigger = true
+            gitSyncManager.notifyFileChanged()
         }
     }
 
@@ -154,6 +160,7 @@ struct FloatingPanelView: View {
         if wasSelected {
             selectedNote = vaultManager.notes.first
         }
+        gitSyncManager.notifyFileChanged()
     }
 
     private func syncEditingContent() {
@@ -169,6 +176,7 @@ struct FloatingPanelView: View {
         guard var note = selectedNote else { return }
         note.content = editingContent
         vaultManager.saveNote(note)
+        gitSyncManager.notifyFileChanged()
     }
 
     private func scheduleSave() {
