@@ -297,7 +297,7 @@
 
     <section class="settings-section about">
       <h4>About</h4>
-      <p>SideNote v0.1.0</p>
+      <p>SideNote v0.1.1</p>
       <p class="setting-description">A quick markdown note-taking app.</p>
       <button class="small-btn update-btn" onclick={() => checkForUpdates(false)}>Check for Updates</button>
     </section>
