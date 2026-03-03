@@ -1,0 +1,53 @@
+:root {
+  --monokai-background: #272822;
+  --monokai-foreground: #F8F8F2;
+  --monokai-keyword: #F92672;
+  --monokai-string: #E6DB74;
+  --monokai-function: #A6E22E;
+  --monokai-type: #66D9EF;
+  --monokai-number: #AE81FF;
+  --monokai-comment: #75715E;
+  --monokai-codeblock-bg: #1E1F1C;
+  --monokai-codeblock-header-bg: rgba(30, 31, 28, 0.8);
+  --monokai-inline-code-bg: #3E3D32;
+  --monokai-panel-background: #272822;
+  --monokai-toolbar-background: #1E1F1C;
+  --monokai-tab-background: #3E3D32;
+  --monokai-tab-active-background: #49483E;
+  --monokai-border: rgba(117, 113, 94, 0.3);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #app {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: transparent;
+  color: var(--monokai-foreground);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--monokai-comment);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--monokai-foreground);
+}
