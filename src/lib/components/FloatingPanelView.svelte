@@ -4,7 +4,7 @@
   import { activeView, editorFocusTrigger } from "../stores/ui";
   import { notes, selectedNote, editingContent, vaultPath } from "../stores/vault";
   import { settings } from "../stores/settings";
-  import { getNotes, createNote, saveNote, getVaultPath } from "../commands/vault";
+  import { getNotes, createNote, saveNote, getVaultPath, recordNoteOpened } from "../commands/vault";
   import { getSettings, updateSettings } from "../commands/settings";
   import { getPinnedNotes, togglePin } from "../commands/pin";
   import { pinnedNoteIds } from "../stores/pin";
@@ -154,6 +154,7 @@
     selectedNote.set(note);
     editingContent.set(note.content);
     editorFocusTrigger.set(true);
+    recordNoteOpened(note.id).catch(() => {});
   }
 
   async function handleNewNote() {

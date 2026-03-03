@@ -1,5 +1,6 @@
 use crate::models::note::Note;
 use crate::state::git_sync_manager::GitSyncManager;
+use crate::state::recent_manager::RecentManager;
 use crate::state::settings_manager::SettingsManager;
 use crate::state::vault_manager::VaultManager;
 use std::path::PathBuf;
@@ -41,8 +42,26 @@ pub fn get_vault_path(settings_manager: State<'_, SettingsManager>) -> Option<St
 }
 
 #[tauri::command]
-pub fn get_notes(vault_manager: State<'_, VaultManager>) -> Vec<Note> {
-    vault_manager.load_notes()
+pub fn get_notes(
+    vault_manager: State<'_, VaultManager>,
+    recent_manager: State<'_, RecentManager>,
+) -> Vec<Note> {
+    let recent = recent_manager.all();
+    let mut notes = vault_manager.load_notes();
+    notes.sort_by(|a, b| {
+        let a_time = recent.get(&a.id).copied().unwrap_or(a.modified_at);
+        let b_time = recent.get(&b.id).copied().unwrap_or(b.modified_at);
+        b_time.cmp(&a_time)
+    });
+    notes
+}
+
+#[tauri::command]
+pub fn record_note_opened(
+    note_id: String,
+    recent_manager: State<'_, RecentManager>,
+) -> i64 {
+    recent_manager.record_opened(&note_id)
 }
 
 #[tauri::command]

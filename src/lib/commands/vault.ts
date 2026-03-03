@@ -32,3 +32,7 @@ export async function getVaultPath(): Promise<string | null> {
 export async function createVault(): Promise<string | null> {
   return invoke<string | null>("create_vault");
 }
+
+export async function recordNoteOpened(noteId: string): Promise<number> {
+  return invoke<number>("record_note_opened", { noteId });
+}

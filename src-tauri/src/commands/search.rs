@@ -1,4 +1,5 @@
 use crate::models::note::Note;
+use crate::state::recent_manager::RecentManager;
 use crate::state::search_manager::SearchManager;
 use crate::state::vault_manager::VaultManager;
 use serde::Serialize;
@@ -30,8 +31,19 @@ fn make_snippet(content: &str) -> String {
 }
 
 #[tauri::command]
-pub fn search_notes(query: String, vault_manager: State<'_, VaultManager>) -> Vec<SearchResult> {
-    let notes = vault_manager.load_notes();
+pub fn search_notes(
+    query: String,
+    vault_manager: State<'_, VaultManager>,
+    recent_manager: State<'_, RecentManager>,
+) -> Vec<SearchResult> {
+    let recent = recent_manager.all();
+    let mut notes = vault_manager.load_notes();
+    // Sort by last opened (fallback to modified_at)
+    notes.sort_by(|a, b| {
+        let a_time = recent.get(&a.id).copied().unwrap_or(a.modified_at);
+        let b_time = recent.get(&b.id).copied().unwrap_or(b.modified_at);
+        b_time.cmp(&a_time)
+    });
     SearchManager::search(&notes, &query)
         .into_iter()
         .map(|(note, score)| {
