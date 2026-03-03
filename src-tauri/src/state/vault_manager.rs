@@ -1,26 +1,22 @@
 use crate::models::note::Note;
 use chrono::Utc;
-use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 pub struct VaultManager {
     vault_path: Mutex<Option<PathBuf>>,
-    note_ids: Mutex<HashMap<PathBuf, String>>,
 }
 
 impl VaultManager {
     pub fn new() -> Self {
         Self {
             vault_path: Mutex::new(None),
-            note_ids: Mutex::new(HashMap::new()),
         }
     }
 
     pub fn set_vault(&self, path: PathBuf) {
         *self.vault_path.lock().unwrap() = Some(path);
-        self.note_ids.lock().unwrap().clear();
     }
 
     pub fn vault_path(&self) -> Option<PathBuf> {
@@ -39,12 +35,11 @@ impl VaultManager {
         };
 
         let mut notes = Vec::new();
-        let mut ids = self.note_ids.lock().unwrap();
 
         for entry in entries.flatten() {
             let path = entry.path();
             if path.extension().map_or(false, |ext| ext == "md") {
-                if let Some(note) = self.load_note_from_path(&path, &mut ids) {
+                if let Some(note) = Self::load_note_from_path(&path) {
                     notes.push(note);
                 }
             }
@@ -54,15 +49,17 @@ impl VaultManager {
         notes
     }
 
-    fn load_note_from_path(
-        &self,
-        path: &Path,
-        ids: &mut HashMap<PathBuf, String>,
-    ) -> Option<Note> {
+    fn load_note_from_path(path: &Path) -> Option<Note> {
         let content = fs::read_to_string(path).ok()?;
         let metadata = fs::metadata(path).ok()?;
 
         let file_name = path.file_name()?.to_str()?.to_string();
+
+        // Use filename without extension as stable ID
+        let id = file_name
+            .strip_suffix(".md")
+            .unwrap_or(&file_name)
+            .to_string();
 
         let created_at = metadata
             .created()
@@ -77,11 +74,6 @@ impl VaultManager {
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
             .map(|d| d.as_millis() as i64)
             .unwrap_or_else(|| Utc::now().timestamp_millis());
-
-        let id = ids
-            .entry(path.to_path_buf())
-            .or_insert_with(|| uuid::Uuid::new_v4().to_string())
-            .clone();
 
         let title = Note::derive_title(&content, &file_name);
 
@@ -105,13 +97,11 @@ impl VaultManager {
 
         fs::write(&file_path, &default_content).ok()?;
 
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = filename
+            .strip_suffix(".md")
+            .unwrap_or(&filename)
+            .to_string();
         let ts = now.timestamp_millis();
-
-        self.note_ids
-            .lock()
-            .unwrap()
-            .insert(file_path.clone(), id.clone());
 
         Some(Note {
             id,
@@ -125,32 +115,22 @@ impl VaultManager {
     }
 
     pub fn save_note(&self, id: &str, content: &str) -> Result<(), String> {
-        let ids = self.note_ids.lock().unwrap();
-        let path = ids
-            .iter()
-            .find(|(_, v)| v.as_str() == id)
-            .map(|(k, _)| k.clone());
-
-        match path {
-            Some(p) => fs::write(&p, content).map_err(|e| e.to_string()),
-            None => Err("Note not found".to_string()),
+        let vault = self.vault_path().ok_or("No vault set")?;
+        let path = vault.join(format!("{}.md", id));
+        if path.exists() {
+            fs::write(&path, content).map_err(|e| e.to_string())
+        } else {
+            Err("Note not found".to_string())
         }
     }
 
     pub fn delete_note(&self, id: &str) -> Result<(), String> {
-        let mut ids = self.note_ids.lock().unwrap();
-        let path = ids
-            .iter()
-            .find(|(_, v)| v.as_str() == id)
-            .map(|(k, _)| k.clone());
-
-        match path {
-            Some(p) => {
-                trash::delete(&p).map_err(|e| e.to_string())?;
-                ids.remove(&p);
-                Ok(())
-            }
-            None => Err("Note not found".to_string()),
+        let vault = self.vault_path().ok_or("No vault set")?;
+        let path = vault.join(format!("{}.md", id));
+        if path.exists() {
+            trash::delete(&path).map_err(|e| e.to_string())
+        } else {
+            Err("Note not found".to_string())
         }
     }
 
