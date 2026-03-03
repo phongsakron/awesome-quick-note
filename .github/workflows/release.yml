@@ -10,102 +10,48 @@ permissions:
 
 jobs:
   build-and-release:
-    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: "--target aarch64-apple-darwin"
+          - platform: macos-latest
+            args: "--target x86_64-apple-darwin"
+          - platform: ubuntu-22.04
+            args: ""
+
+    runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Extract version from tag
-        id: version
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-
-      - name: Build release binary
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
         run: |
-          swift --version
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
-          # Initial build to generate derived sources
-          swift build -c release
-
-          # Patch SPM-generated resource_bundle_accessor.swift files so Bundle.module
-          # also checks Bundle.main.resourceURL (Contents/Resources/ in .app bundles).
-          # SPM only checks Bundle.main.bundleURL which is the .app root — but macOS
-          # codesign forbids loose bundles there. This adds a resourceURL fallback.
-          for accessor in $(find .build -path "*/release/*.build/DerivedSources/resource_bundle_accessor.swift"); do
-            # Extract the bundle name (e.g. "KeyboardShortcuts_KeyboardShortcuts.bundle")
-            BUNDLE_NAME=$(grep 'appendingPathComponent(' "$accessor" | head -1 | sed 's/.*appendingPathComponent("\([^"]*\)").*/\1/')
-            if [ -n "$BUNDLE_NAME" ]; then
-              cat > "$accessor" << ACCESSOR
-          import Foundation
-
-          extension Foundation.Bundle {
-              static let module: Bundle = {
-                  let bundleName = "$BUNDLE_NAME"
-                  let candidates = [
-                      Bundle.main.bundleURL.appendingPathComponent(bundleName),
-                      Bundle.main.resourceURL?.appendingPathComponent(bundleName),
-                      Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/" + bundleName),
-                  ].compactMap { \$0 }
-
-                  for candidate in candidates {
-                      if let bundle = Bundle(path: candidate.path) {
-                          return bundle
-                      }
-                  }
-
-                  Swift.fatalError("could not load resource bundle: \(bundleName)")
-              }()
-          }
-          ACCESSOR
-              echo "Patched: $accessor ($BUNDLE_NAME)"
-            fi
-          done
-
-          # Rebuild with patched accessors
-          swift build -c release
-          BIN_PATH=$(swift build -c release --show-bin-path)
-          echo "BIN_PATH=$BIN_PATH" >> "$GITHUB_ENV"
-          echo "Build output:" && ls "$BIN_PATH"/*.bundle || echo "No bundles found"
-
-      - name: Assemble .app bundle
-        run: |
-          APP="AwesomeQuickNote.app"
-          mkdir -p "$APP/Contents/MacOS"
-          mkdir -p "$APP/Contents/Resources"
-
-          # Copy binary
-          cp "$BIN_PATH/AwesomeQuickNote" "$APP/Contents/MacOS/"
-
-          # Copy Info.plist, add CFBundleExecutable, and stamp version from tag
-          cp Info.plist "$APP/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c "Add :CFBundleExecutable string AwesomeQuickNote" "$APP/Contents/Info.plist" 2>/dev/null || \
-          /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable AwesomeQuickNote" "$APP/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ steps.version.outputs.VERSION }}" "$APP/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ steps.version.outputs.VERSION }}" "$APP/Contents/Info.plist"
-
-          # PkgInfo
-          echo -n "APPL????" > "$APP/Contents/PkgInfo"
-
-          # Copy all SPM resource bundles into Contents/Resources/
-          for bundle in "$BIN_PATH"/*.bundle; do
-            [ -d "$bundle" ] && cp -R "$bundle" "$APP/Contents/Resources/"
-          done
-
-          echo "App bundle contents:"
-          find "$APP" -maxdepth 3 -type d
-
-      - name: Ad-hoc code sign
-        run: codesign --force --deep --sign - AwesomeQuickNote.app
-
-      - name: Create DMG
-        run: |
-          DMG_NAME="AwesomeQuickNote-${{ steps.version.outputs.VERSION }}-macos"
-          mkdir -p dmg-stage
-          cp -R AwesomeQuickNote.app dmg-stage/
-          ln -s /Applications dmg-stage/Applications
-          hdiutil create -volname "AwesomeQuickNote" -srcfolder dmg-stage -ov -format UDZO "$DMG_NAME.dmg"
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
-          name: v${{ steps.version.outputs.VERSION }}
-          generate_release_notes: true
-          files: AwesomeQuickNote-${{ steps.version.outputs.VERSION }}-macos.dmg
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install frontend dependencies
+        run: bun install
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: ${{ github.ref_name }}
+          releaseBody: "See the assets to download and install this version."
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
