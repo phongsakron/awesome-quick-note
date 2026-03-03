@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import hljs from "highlight.js";
   import "highlight.js/styles/monokai.css";
+  import { convertFileSrc } from "@tauri-apps/api/core";
 
   interface Props {
     content: string;
@@ -9,12 +10,11 @@
   }
 
   let { content, vaultPath }: Props = $props();
-  let previewEl: HTMLDivElement | undefined = $state();
   let md: any = $state(null);
 
   onMount(async () => {
     const MarkdownIt = (await import("markdown-it")).default;
-    md = new MarkdownIt({
+    const instance = new MarkdownIt({
       html: true,
       linkify: true,
       typographer: true,
@@ -26,31 +26,36 @@
               '</code></pre>';
           } catch {}
         }
-        return '<pre class="hljs"><code>' + md.utils.escapeHtml(str) + '</code></pre>';
+        return '<pre class="hljs"><code>' + instance.utils.escapeHtml(str) + '</code></pre>';
       }
     });
+
+    // Custom image renderer: resolve local paths via convertFileSrc
+    const defaultImageRender = instance.renderer.rules.image ||
+      function (tokens: any, idx: any, options: any, _env: any, self: any) {
+        return self.renderToken(tokens, idx, options);
+      };
+
+    instance.renderer.rules.image = function (tokens: any, idx: any, options: any, env: any, self: any) {
+      const token = tokens[idx];
+      const srcIndex = token.attrIndex("src");
+      if (srcIndex >= 0) {
+        const src = token.attrs[srcIndex][1];
+        if (src && !src.startsWith("http://") && !src.startsWith("https://") && vaultPath) {
+          const fullPath = `${vaultPath}/${src}`;
+          token.attrs[srcIndex][1] = convertFileSrc(fullPath);
+        }
+      }
+      return defaultImageRender(tokens, idx, options, env, self);
+    };
+
+    md = instance;
   });
 
   let renderedHtml = $derived(md ? md.render(content) : "");
-
-  $effect(() => {
-    if (previewEl && renderedHtml && vaultPath) {
-      // Wait for DOM to update, then fix image paths
-      requestAnimationFrame(() => {
-        if (!previewEl) return;
-        const images = previewEl.querySelectorAll("img");
-        images.forEach((img) => {
-          const src = img.getAttribute("src");
-          if (src && !src.startsWith("http://") && !src.startsWith("https://") && !src.startsWith("asset://")) {
-            img.src = `asset://localhost/${encodeURI(vaultPath + "/" + src)}`;
-          }
-        });
-      });
-    }
-  });
 </script>
 
-<div class="markdown-preview" bind:this={previewEl}>
+<div class="markdown-preview">
   {@html renderedHtml}
 </div>
 

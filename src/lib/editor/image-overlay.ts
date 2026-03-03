@@ -3,6 +3,8 @@
  * Shows image thumbnails for markdown image syntax when cursor is not on that line.
  */
 
+import { convertFileSrc } from "@tauri-apps/api/core";
+
 export function updateImageOverlays(
   editorEl: HTMLDivElement,
   vaultPath: string | null,
@@ -42,10 +44,10 @@ export function updateImageOverlays(
     overlay.contentEditable = "false";
 
     const img = document.createElement("img");
-    // For local files, use the asset protocol
+    // For local files, use convertFileSrc for the asset protocol
     img.src = fullPath.startsWith("http")
       ? fullPath
-      : `asset://localhost/${encodeURI(fullPath)}`;
+      : convertFileSrc(fullPath);
     img.alt = "Image preview";
     img.style.maxWidth = "100%";
     img.style.maxHeight = "200px";
@@ -58,7 +60,7 @@ export function updateImageOverlays(
 
     overlay.appendChild(img);
 
-    // Add button bar with Open and Copy Path buttons
+    // Add button bar with Open and Copy buttons
     const btnBar = document.createElement("div");
     btnBar.className = "image-overlay-buttons";
 
@@ -70,27 +72,36 @@ export function updateImageOverlays(
       e.preventDefault();
       e.stopPropagation();
       try {
-        const { open } = await import("@tauri-apps/plugin-shell");
-        await open(
-          fullPath.startsWith("http") ? fullPath : `file://${fullPath}`,
-        );
+        const { openFile } = await import("../commands/image");
+        await openFile(fullPath);
       } catch {
-        // Silently fail if shell plugin is unavailable
+        // Silently fail
       }
     };
 
     const copyBtn = document.createElement("button");
     copyBtn.className = "image-overlay-btn";
-    copyBtn.textContent = "Copy Path";
+    copyBtn.textContent = "Copy";
     copyBtn.contentEditable = "false";
-    copyBtn.onclick = (e) => {
+    copyBtn.onclick = async (e) => {
       e.preventDefault();
       e.stopPropagation();
-      navigator.clipboard.writeText(imgPath);
-      copyBtn.textContent = "Copied!";
-      setTimeout(() => {
-        copyBtn.textContent = "Copy Path";
-      }, 1500);
+      try {
+        // Use native Rust clipboard via arboard (matches Swift's NSPasteboard.writeObjects)
+        const { copyImageToClipboard } = await import("../commands/image");
+        await copyImageToClipboard(fullPath);
+        copyBtn.textContent = "Copied!";
+        setTimeout(() => {
+          copyBtn.textContent = "Copy";
+        }, 1500);
+      } catch {
+        // Fallback: copy path if native copy fails
+        await navigator.clipboard.writeText(imgPath);
+        copyBtn.textContent = "Copied!";
+        setTimeout(() => {
+          copyBtn.textContent = "Copy";
+        }, 1500);
+      }
     };
 
     btnBar.appendChild(openBtn);
