@@ -104,8 +104,15 @@ pub fn run() {
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_hide, &quit])?;
 
+            let tray_png = ::image::load_from_memory(include_bytes!("../icons/tray-icon@2x.png"))
+                .expect("Failed to load tray icon")
+                .to_rgba8();
+            let (tw, th) = tray_png.dimensions();
+            let tray_icon = tauri::image::Image::new_owned(tray_png.into_raw(), tw, th);
+
             TrayIconBuilder::new()
-                .icon(app.default_window_icon().unwrap().clone())
+                .icon_as_template(true)
+                .icon(tray_icon)
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show_hide" => {
