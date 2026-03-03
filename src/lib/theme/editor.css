@@ -2,7 +2,7 @@
   width: 100%;
   height: 100%;
   padding: 16px;
-  background: var(--monokai-background);
+  background: transparent;
   color: var(--monokai-foreground);
   font-family: var(--editor-font-family, "SF Mono", "Fira Code", "JetBrains Mono", monospace);
   font-size: var(--editor-font-size, 14px);
