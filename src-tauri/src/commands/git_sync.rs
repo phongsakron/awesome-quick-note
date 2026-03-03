@@ -1,4 +1,4 @@
-use crate::models::git_status::GitSyncStatus;
+use crate::models::git_status::GitSyncEvent;
 use crate::state::git_sync_manager::GitSyncManager;
 use crate::state::settings_manager::SettingsManager;
 use std::sync::Arc;
@@ -7,8 +7,8 @@ use tauri::{AppHandle, State};
 #[tauri::command]
 pub fn get_git_sync_status(
     git_sync_manager: State<'_, Arc<GitSyncManager>>,
-) -> GitSyncStatus {
-    git_sync_manager.status()
+) -> GitSyncEvent {
+    git_sync_manager.get_status_event()
 }
 
 #[tauri::command]

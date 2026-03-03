@@ -1,4 +1,4 @@
-use crate::models::git_status::GitSyncStatus;
+use crate::models::git_status::{GitSyncEvent, GitSyncStatus};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
@@ -31,8 +31,21 @@ impl GitSyncManager {
         self.status.lock().unwrap().clone()
     }
 
+    pub fn get_status_event(&self) -> GitSyncEvent {
+        let vault = self.vault_path.lock().unwrap().clone();
+        let last_commit_date = vault.and_then(|v| Self::get_last_commit_date(&v));
+        GitSyncEvent {
+            status: self.status(),
+            last_commit_date,
+        }
+    }
+
     pub fn last_sync(&self) -> Option<i64> {
         *self.last_sync.lock().unwrap()
+    }
+
+    pub fn set_vault_path(&self, path: PathBuf) {
+        *self.vault_path.lock().unwrap() = Some(path);
     }
 
     pub fn is_enabled(&self) -> bool {
@@ -225,8 +238,20 @@ impl GitSyncManager {
     }
 
     fn emit_status(&self, app_handle: &AppHandle) {
-        let status = self.status();
-        let _ = app_handle.emit("git:status-changed", &status);
+        let vault = self.vault_path.lock().unwrap().clone();
+        let last_commit_date = vault.and_then(|v| Self::get_last_commit_date(&v));
+        let event = GitSyncEvent {
+            status: self.status(),
+            last_commit_date,
+        };
+        let _ = app_handle.emit("git:status-changed", &event);
+    }
+
+    fn get_last_commit_date(vault: &Path) -> Option<i64> {
+        Self::run_git(&["log", "-1", "--format=%ct"], vault)
+            .ok()
+            .and_then(|s| s.trim().parse::<i64>().ok())
+            .map(|secs| secs * 1000) // convert to millis for JS
     }
 
     fn check_is_git_repo(path: &Path) -> bool {

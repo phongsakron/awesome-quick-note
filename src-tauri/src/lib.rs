@@ -82,6 +82,9 @@ pub fn run() {
                 if path.exists() {
                     vault_manager.set_vault(path.clone());
 
+                    // Always set vault path so last commit date is available
+                    git_sync_manager.set_vault_path(path.clone());
+
                     // Set up git sync
                     if settings_manager.get().git_sync_enabled {
                         git_sync_manager.set_enabled(true, app.handle());

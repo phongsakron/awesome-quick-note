@@ -16,3 +16,9 @@ pub enum GitSyncStatus {
     #[serde(rename = "error")]
     Error(String),
 }
+
+#[derive(Debug, Clone, Serialize)]
+pub struct GitSyncEvent {
+    pub status: GitSyncStatus,
+    pub last_commit_date: Option<i64>,
+}
