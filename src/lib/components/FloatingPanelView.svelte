@@ -12,6 +12,7 @@
   import { gitSyncStatus, lastCommitDate, parseRustStatus } from "../stores/git-sync";
   import { getGitSyncStatus } from "../commands/git-sync";
   import { setWindowPosition, getScreenBounds } from "../commands/window";
+  import { checkForUpdates } from "../commands/updater";
   import { debounce } from "../utils/debounce";
   import { listen } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -61,6 +62,9 @@
         gitSyncStatus.set(parseRustStatus(gitStatus.status));
         lastCommitDate.set(gitStatus.last_commit_date);
       } catch {}
+
+      // Silent check for updates
+      checkForUpdates(true);
     })();
 
     // Listen for vault changes from file watcher
