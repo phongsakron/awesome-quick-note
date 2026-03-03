@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { gitSyncStatus, lastSyncDate } from "../stores/git-sync";
+  import { gitSyncStatus, lastCommitDate } from "../stores/git-sync";
   import { manualSync } from "../commands/git-sync";
+  import { relativeDate } from "../utils/relative-date";
 
   let statusClass = $derived.by(() => {
     const s = $gitSyncStatus;
@@ -17,7 +18,7 @@
     const s = $gitSyncStatus;
     if (s === "disabled") return "";
     if (s === "syncing") return "Syncing...";
-    if (s === "idle") return "Git synced" + ($lastSyncDate ? ` (${new Date($lastSyncDate).toLocaleTimeString()})` : "");
+    if (s === "idle") return "Git synced" + ($lastCommitDate ? ` · ${relativeDate($lastCommitDate)}` : "");
     if (s === "no_remote") return "No remote configured";
     if (s === "not_a_repo") return "";
     if (typeof s === "object" && "error" in s) return `Error: ${s.error}`;
@@ -39,6 +40,9 @@
       <path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
       <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
     </svg>
+    {#if $lastCommitDate && statusClass !== "syncing"}
+      <span class="commit-date">{relativeDate($lastCommitDate)}</span>
+    {/if}
   </button>
 {/if}
 
@@ -51,7 +55,13 @@
     border-radius: 4px;
     display: flex;
     align-items: center;
+    gap: 4px;
     transition: color 0.15s;
+  }
+
+  .commit-date {
+    font-size: 10px;
+    opacity: 0.7;
   }
 
   .git-status.idle { color: var(--monokai-function); }

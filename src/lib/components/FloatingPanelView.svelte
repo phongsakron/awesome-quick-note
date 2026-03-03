@@ -9,6 +9,8 @@
   import { getSettings, updateSettings } from "../commands/settings";
   import { getPinnedNotes, togglePin } from "../commands/pin";
   import { pinnedNoteIds } from "../stores/pin";
+  import { gitSyncStatus, lastCommitDate, parseRustStatus } from "../stores/git-sync";
+  import { getGitSyncStatus } from "../commands/git-sync";
   import { setWindowPosition, getScreenBounds } from "../commands/window";
   import { debounce } from "../utils/debounce";
   import { listen } from "@tauri-apps/api/event";
@@ -52,6 +54,13 @@
         const pinned = await getPinnedNotes();
         pinnedNoteIds.set(new Set(pinned));
       } catch {}
+
+      // Load initial git sync status
+      try {
+        const gitStatus = await getGitSyncStatus();
+        gitSyncStatus.set(parseRustStatus(gitStatus.status));
+        lastCommitDate.set(gitStatus.last_commit_date);
+      } catch {}
     })();
 
     // Listen for vault changes from file watcher
@@ -60,8 +69,9 @@
     });
 
     // Listen for git status changes
-    listen("git:status-changed", (event) => {
-      // Will be handled by git sync store
+    listen<{ status: unknown; last_commit_date: number | null }>("git:status-changed", (event) => {
+      gitSyncStatus.set(parseRustStatus(event.payload.status));
+      lastCommitDate.set(event.payload.last_commit_date);
     });
 
     // Listen for tray events

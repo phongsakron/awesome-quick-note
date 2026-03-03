@@ -1,6 +1,7 @@
 <script lang="ts">
   import { settings, type ShortcutSettings } from "../stores/settings";
-  import { gitSyncStatus } from "../stores/git-sync";
+  import { gitSyncStatus, lastCommitDate } from "../stores/git-sync";
+  import { relativeDate } from "../utils/relative-date";
   import { vaultPath } from "../stores/vault";
   import { updateSettings } from "../commands/settings";
   import { selectVault, setVault } from "../commands/vault";
@@ -281,6 +282,12 @@
           onchange={handleGitSyncToggle}
         />
       </div>
+      {#if $lastCommitDate}
+        <div class="setting-row">
+          <label>Last Commit</label>
+          <span class="last-commit-value">{relativeDate($lastCommitDate)}</span>
+        </div>
+      {/if}
       <p class="setting-description">
         Automatically commit and push changes to a git remote.
         Your vault must be a git repository with a configured remote.
@@ -430,6 +437,11 @@
     color: var(--monokai-comment);
     margin-top: 4px;
     line-height: 1.4;
+  }
+
+  .last-commit-value {
+    font-size: 12px;
+    color: var(--monokai-comment);
   }
 
   .shortcut-btn {
