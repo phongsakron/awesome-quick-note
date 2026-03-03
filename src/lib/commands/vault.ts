@@ -28,3 +28,7 @@ export async function deleteNote(id: string): Promise<void> {
 export async function getVaultPath(): Promise<string | null> {
   return invoke<string | null>("get_vault_path");
 }
+
+export async function createVault(): Promise<string | null> {
+  return invoke<string | null>("create_vault");
+}

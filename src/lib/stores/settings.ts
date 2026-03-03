@@ -19,6 +19,7 @@ export interface ShortcutSettings {
   new_note: string;
   search_notes: string;
   toggle_pin: string;
+  reset_position: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -37,6 +38,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     new_note: "CmdOrCtrl+Alt+N",
     search_notes: "CmdOrCtrl+Shift+F",
     toggle_pin: "CmdOrCtrl+Alt+P",
+    reset_position: "CmdOrCtrl+Shift+R",
   },
 };
 

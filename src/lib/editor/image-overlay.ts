@@ -57,6 +57,46 @@ export function updateImageOverlays(
     };
 
     overlay.appendChild(img);
+
+    // Add button bar with Open and Copy Path buttons
+    const btnBar = document.createElement("div");
+    btnBar.className = "image-overlay-buttons";
+
+    const openBtn = document.createElement("button");
+    openBtn.className = "image-overlay-btn";
+    openBtn.textContent = "Open";
+    openBtn.contentEditable = "false";
+    openBtn.onclick = async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        const { open } = await import("@tauri-apps/plugin-shell");
+        await open(
+          fullPath.startsWith("http") ? fullPath : `file://${fullPath}`,
+        );
+      } catch {
+        // Silently fail if shell plugin is unavailable
+      }
+    };
+
+    const copyBtn = document.createElement("button");
+    copyBtn.className = "image-overlay-btn";
+    copyBtn.textContent = "Copy Path";
+    copyBtn.contentEditable = "false";
+    copyBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      navigator.clipboard.writeText(imgPath);
+      copyBtn.textContent = "Copied!";
+      setTimeout(() => {
+        copyBtn.textContent = "Copy Path";
+      }, 1500);
+    };
+
+    btnBar.appendChild(openBtn);
+    btnBar.appendChild(copyBtn);
+    overlay.appendChild(btnBar);
+
     lineEl.after(overlay);
   }
 }

@@ -4,6 +4,7 @@ import type { Note } from "./vault";
 export interface SearchResult {
   note: Note;
   score: number;
+  snippet: string;
 }
 
 export const searchQuery = writable("");
