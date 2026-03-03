@@ -9,9 +9,10 @@
   interface Props {
     onSelectNote: (note: Note) => void;
     onDismiss: () => void;
+    onDeleteNote: (note: Note) => Promise<void>;
   }
 
-  let { onSelectNote, onDismiss }: Props = $props();
+  let { onSelectNote, onDismiss, onDeleteNote }: Props = $props();
   let inputEl: HTMLInputElement | undefined = $state();
 
   $effect(() => {
@@ -62,7 +63,7 @@
     }
   }
 
-  function handleKeydown(e: KeyboardEvent) {
+  async function handleKeydown(e: KeyboardEvent) {
     if (e.key === "Escape") {
       e.preventDefault();
       onDismiss();
@@ -72,6 +73,15 @@
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       selectedIndex.update((i) => Math.max(i - 1, 0));
+    } else if (e.key === "Backspace" && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      const result = $searchResults[$selectedIndex];
+      if (result) {
+        await onDeleteNote(result.note);
+        await loadResults($searchQuery);
+        // Clamp selected index if list shrunk
+        selectedIndex.update((i) => Math.min(i, $searchResults.length - 1));
+      }
     } else if (e.key === "Enter") {
       e.preventDefault();
       const result = $searchResults[$selectedIndex];

@@ -4,7 +4,8 @@
   import { activeView, editorFocusTrigger } from "../stores/ui";
   import { notes, selectedNote, editingContent, vaultPath } from "../stores/vault";
   import { settings } from "../stores/settings";
-  import { getNotes, createNote, saveNote, getVaultPath, recordNoteOpened } from "../commands/vault";
+  import { getNotes, createNote, saveNote, deleteNote, getVaultPath, recordNoteOpened } from "../commands/vault";
+  import { confirm } from "@tauri-apps/plugin-dialog";
   import { getSettings, updateSettings } from "../commands/settings";
   import { getPinnedNotes, togglePin } from "../commands/pin";
   import { pinnedNoteIds } from "../stores/pin";
@@ -192,6 +193,21 @@
     }
   }
 
+  async function handleDeleteNote(note: Note) {
+    const confirmed = await confirm(`Delete "${note.title}"? It will be moved to Trash.`, {
+      title: "Delete Note",
+      kind: "warning",
+    });
+    if (!confirmed) return;
+
+    await deleteNote(note.id);
+    pinnedNoteIds.update((s) => {
+      s.delete(note.id);
+      return new Set(s);
+    });
+    await loadNotes();
+  }
+
   function handleSelectNote(note: Note) {
     // Save current note before switching
     if ($selectedNote && $editingContent !== $selectedNote.content) {
@@ -229,7 +245,7 @@
       </div>
     {:else if $activeView === "search"}
       <div class="overlay-content">
-        <SearchView onSelectNote={handleSelectNote} onDismiss={handleDismissOverlay} />
+        <SearchView onSelectNote={handleSelectNote} onDismiss={handleDismissOverlay} onDeleteNote={handleDeleteNote} />
       </div>
     {:else if $selectedNote}
       <div class="editor-content">
