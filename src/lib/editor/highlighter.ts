@@ -4,6 +4,49 @@
  * Works line-by-line to preserve contenteditable structure.
  */
 
+import hljs from "highlight.js/lib/core";
+import javascript from "highlight.js/lib/languages/javascript";
+import typescript from "highlight.js/lib/languages/typescript";
+import python from "highlight.js/lib/languages/python";
+import rust from "highlight.js/lib/languages/rust";
+import json from "highlight.js/lib/languages/json";
+import bash from "highlight.js/lib/languages/bash";
+import css from "highlight.js/lib/languages/css";
+import xml from "highlight.js/lib/languages/xml";
+import markdown from "highlight.js/lib/languages/markdown";
+import yaml from "highlight.js/lib/languages/yaml";
+import sql from "highlight.js/lib/languages/sql";
+import go from "highlight.js/lib/languages/go";
+import swift from "highlight.js/lib/languages/swift";
+import java from "highlight.js/lib/languages/java";
+import cpp from "highlight.js/lib/languages/cpp";
+
+hljs.registerLanguage("javascript", javascript);
+hljs.registerLanguage("js", javascript);
+hljs.registerLanguage("typescript", typescript);
+hljs.registerLanguage("ts", typescript);
+hljs.registerLanguage("python", python);
+hljs.registerLanguage("py", python);
+hljs.registerLanguage("rust", rust);
+hljs.registerLanguage("rs", rust);
+hljs.registerLanguage("json", json);
+hljs.registerLanguage("bash", bash);
+hljs.registerLanguage("sh", bash);
+hljs.registerLanguage("shell", bash);
+hljs.registerLanguage("css", css);
+hljs.registerLanguage("xml", xml);
+hljs.registerLanguage("html", xml);
+hljs.registerLanguage("markdown", markdown);
+hljs.registerLanguage("md", markdown);
+hljs.registerLanguage("yaml", yaml);
+hljs.registerLanguage("yml", yaml);
+hljs.registerLanguage("sql", sql);
+hljs.registerLanguage("go", go);
+hljs.registerLanguage("swift", swift);
+hljs.registerLanguage("java", java);
+hljs.registerLanguage("cpp", cpp);
+hljs.registerLanguage("c", cpp);
+
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, "&amp;")
@@ -185,13 +228,38 @@ export interface HighlightedLine {
  * Highlight markdown text, handling code blocks specially.
  * Returns an array of line objects with HTML content and optional CSS classes.
  */
+/**
+ * Syntax-highlight a code block using highlight.js, returning per-line HTML.
+ */
+function highlightCodeBlock(codeLines: string[], lang: string): string[] {
+  const code = codeLines.join("\n");
+  let highlighted: string;
+
+  if (!lang || !hljs.getLanguage(lang)) {
+    // No language or unknown language — plain escaped
+    return codeLines.map((l) => escapeHtml(l) || "<br>");
+  }
+
+  try {
+    highlighted = hljs.highlight(code, { language: lang, ignoreIllegals: true }).value;
+  } catch {
+    return codeLines.map((l) => escapeHtml(l) || "<br>");
+  }
+
+  // highlight.js uses \n for line breaks; split back into per-line HTML
+  return highlighted.split("\n").map((line) => line || "<br>");
+}
+
 export function highlightMarkdown(text: string): HighlightedLine[] {
   const lines = text.split("\n");
   const result: HighlightedLine[] = [];
   let inCodeBlock = false;
   let codeBlockLang = "";
+  let codeBlockLines: string[] = [];
+  let codeBlockFenceIdx = -1;
 
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     // Code fence detection
     const fenceMatch = line.match(/^(```+)(.*)/);
 
@@ -199,6 +267,8 @@ export function highlightMarkdown(text: string): HighlightedLine[] {
       // Opening fence
       inCodeBlock = true;
       codeBlockLang = fenceMatch[2].trim();
+      codeBlockLines = [];
+      codeBlockFenceIdx = result.length;
       const langSpan = codeBlockLang
         ? `<span class="md-codeblock-lang">${escapeHtml(codeBlockLang)}</span>`
         : "";
@@ -209,9 +279,17 @@ export function highlightMarkdown(text: string): HighlightedLine[] {
     }
 
     if (fenceMatch && inCodeBlock) {
-      // Closing fence
+      // Closing fence — now highlight the collected code block
+      const highlightedLines = highlightCodeBlock(codeBlockLines, codeBlockLang);
+      for (const hl of highlightedLines) {
+        result.push({
+          html: `<span class="md-codeblock-content">${hl}</span>`,
+        });
+      }
+
       inCodeBlock = false;
       codeBlockLang = "";
+      codeBlockLines = [];
       result.push({
         html: `<span class="md-codeblock-fence">${escapeHtml(fenceMatch[1])}</span>`,
       });
@@ -219,14 +297,20 @@ export function highlightMarkdown(text: string): HighlightedLine[] {
     }
 
     if (inCodeBlock) {
-      // Inside code block - no markdown highlighting, just escaped
-      result.push({
-        html: `<span class="md-codeblock-content">${escapeHtml(line) || "<br>"}</span>`,
-      });
+      codeBlockLines.push(line);
       continue;
     }
 
     result.push(highlightLine(line));
+  }
+
+  // Unclosed code block — flush remaining lines without highlighting
+  if (inCodeBlock) {
+    for (const codeLine of codeBlockLines) {
+      result.push({
+        html: `<span class="md-codeblock-content">${escapeHtml(codeLine) || "<br>"}</span>`,
+      });
+    }
   }
 
   return result;

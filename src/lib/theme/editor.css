@@ -70,3 +70,30 @@
   text-align: center;
   color: var(--monokai-comment);
 }
+
+/* highlight.js syntax colors (Monokai) for code blocks */
+.markdown-editor .hljs-keyword,
+.markdown-editor .hljs-selector-tag,
+.markdown-editor .hljs-tag { color: var(--monokai-keyword); }
+.markdown-editor .hljs-string,
+.markdown-editor .hljs-regexp { color: var(--monokai-string); }
+.markdown-editor .hljs-title,
+.markdown-editor .hljs-title\.function_,
+.markdown-editor .hljs-section { color: var(--monokai-function); }
+.markdown-editor .hljs-type,
+.markdown-editor .hljs-built_in,
+.markdown-editor .hljs-params { color: var(--monokai-type); }
+.markdown-editor .hljs-number,
+.markdown-editor .hljs-literal { color: var(--monokai-number); }
+.markdown-editor .hljs-comment,
+.markdown-editor .hljs-doctag { color: var(--monokai-comment); font-style: italic; }
+.markdown-editor .hljs-attr,
+.markdown-editor .hljs-attribute { color: var(--monokai-function); }
+.markdown-editor .hljs-variable,
+.markdown-editor .hljs-template-variable { color: var(--monokai-foreground); }
+.markdown-editor .hljs-name { color: var(--monokai-keyword); }
+.markdown-editor .hljs-meta { color: var(--monokai-comment); }
+.markdown-editor .hljs-punctuation { color: var(--monokai-foreground); }
+.markdown-editor .hljs-operator { color: var(--monokai-keyword); }
+.markdown-editor .hljs-property { color: var(--monokai-foreground); }
+.markdown-editor .hljs-symbol { color: var(--monokai-number); }
