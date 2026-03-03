@@ -29,59 +29,143 @@
   let findInputEl: HTMLInputElement | undefined = $state();
   let lastContent = "";
 
-  // Save and restore cursor position across re-highlights
+  // Collect line divs (excluding image overlays and other non-content elements)
+  function getLineDivs(el: HTMLDivElement): HTMLElement[] {
+    const divs: HTMLElement[] = [];
+    for (const child of el.children) {
+      if (
+        child.tagName === "DIV" &&
+        !child.classList.contains("image-overlay")
+      ) {
+        divs.push(child as HTMLElement);
+      }
+    }
+    return divs;
+  }
+
+  // Get text offset for a specific DOM point, properly counting \n between line divs
+  function getOffsetForPoint(
+    el: HTMLDivElement,
+    container: Node,
+    containerOffset: number,
+  ): number {
+    const lineDivs = getLineDivs(el);
+    let offset = 0;
+
+    for (let i = 0; i < lineDivs.length; i++) {
+      if (i > 0) offset += 1; // newline between lines
+      const lineDiv = lineDivs[i];
+
+      if (lineDiv.contains(container) || lineDiv === container) {
+        const subRange = document.createRange();
+        subRange.selectNodeContents(lineDiv);
+        subRange.setEnd(container, containerOffset);
+        offset += subRange.toString().length;
+        return offset;
+      }
+
+      offset += lineDiv.textContent?.length || 0;
+    }
+
+    return offset;
+  }
+
+  // Save cursor position (text offset including \n characters)
   function getCursorOffset(el: HTMLDivElement): number {
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0) return -1;
-
     const range = sel.getRangeAt(0);
-    const preRange = document.createRange();
-    preRange.selectNodeContents(el);
-    preRange.setEnd(range.startContainer, range.startOffset);
-    return preRange.toString().length;
+    return getOffsetForPoint(el, range.startContainer, range.startOffset);
   }
 
+  // Get selection start and end offsets
+  function getSelectionRange(el: HTMLDivElement): { start: number; end: number } {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return { start: -1, end: -1 };
+    const range = sel.getRangeAt(0);
+    const start = getOffsetForPoint(el, range.startContainer, range.startOffset);
+    if (range.collapsed) return { start, end: start };
+    const end = getOffsetForPoint(el, range.endContainer, range.endOffset);
+    return { start, end };
+  }
+
+  // Restore cursor to a text offset (including \n characters)
   function setCursorOffset(el: HTMLDivElement, offset: number): void {
     if (offset < 0) return;
-
-    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    const lineDivs = getLineDivs(el);
     let current = 0;
 
-    while (walker.nextNode()) {
-      const node = walker.currentNode as Text;
-      const len = node.textContent?.length || 0;
-      if (current + len >= offset) {
+    for (let i = 0; i < lineDivs.length; i++) {
+      if (i > 0) current += 1; // newline between lines
+
+      const lineDiv = lineDivs[i];
+      const lineLen = lineDiv.textContent?.length || 0;
+
+      if (current + lineLen >= offset || i === lineDivs.length - 1) {
+        const targetInLine = Math.min(Math.max(offset - current, 0), lineLen);
+        const walker = document.createTreeWalker(lineDiv, NodeFilter.SHOW_TEXT);
+        let innerCurrent = 0;
+
+        while (walker.nextNode()) {
+          const node = walker.currentNode as Text;
+          const len = node.textContent?.length || 0;
+          if (innerCurrent + len >= targetInLine) {
+            const sel = window.getSelection();
+            if (sel) {
+              const r = document.createRange();
+              r.setStart(node, targetInLine - innerCurrent);
+              r.collapse(true);
+              sel.removeAllRanges();
+              sel.addRange(r);
+            }
+            return;
+          }
+          innerCurrent += len;
+        }
+
+        // Empty line (no text nodes), place cursor at start of div
         const sel = window.getSelection();
         if (sel) {
-          const range = document.createRange();
-          range.setStart(node, offset - current);
-          range.collapse(true);
+          const r = document.createRange();
+          r.selectNodeContents(lineDiv);
+          r.collapse(true);
           sel.removeAllRanges();
-          sel.addRange(range);
+          sel.addRange(r);
         }
         return;
       }
-      current += len;
+
+      current += lineLen;
     }
 
-    // If offset is beyond content, place at end
+    // Fallback: place at end
     const sel = window.getSelection();
     if (sel) {
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      range.collapse(false);
+      const r = document.createRange();
+      r.selectNodeContents(el);
+      r.collapse(false);
       sel.removeAllRanges();
-      sel.addRange(range);
+      sel.addRange(r);
     }
   }
 
   function getPlainText(el: HTMLDivElement): string {
     // Extract text content preserving newlines from div structure
     let text = "";
+    let isFirstLine = true;
     const children = el.childNodes;
 
     for (let i = 0; i < children.length; i++) {
       const child = children[i];
+
+      // Skip image overlays
+      if (
+        child.nodeType === Node.ELEMENT_NODE &&
+        (child as HTMLElement).classList.contains("image-overlay")
+      ) {
+        continue;
+      }
+
       if (child.nodeType === Node.TEXT_NODE) {
         text += child.textContent || "";
       } else if (child.nodeType === Node.ELEMENT_NODE) {
@@ -89,7 +173,8 @@
         if (el.tagName === "BR") {
           text += "\n";
         } else if (el.tagName === "DIV") {
-          if (i > 0) text += "\n";
+          if (!isFirstLine) text += "\n";
+          isFirstLine = false;
           text += el.textContent || "";
         } else {
           text += el.textContent || "";
@@ -199,6 +284,58 @@
         onContentChange(result.newText);
         return;
       }
+    }
+
+    // Backspace: handle manually to avoid contenteditable DOM corruption
+    if (e.key === "Backspace" && !isMod && !e.altKey) {
+      e.preventDefault();
+      const text = lastContent;
+      const { start, end } = getSelectionRange(editorEl);
+      if (start < 0) return;
+
+      let newText: string;
+      let newCursor: number;
+      if (start !== end) {
+        // Delete selection
+        newText = text.slice(0, start) + text.slice(end);
+        newCursor = start;
+      } else {
+        if (start === 0) return;
+        newText = text.slice(0, start - 1) + text.slice(start);
+        newCursor = start - 1;
+      }
+
+      lastContent = newText;
+      renderHighlightedContent(editorEl, newText);
+      setCursorOffset(editorEl, newCursor);
+      onContentChange(newText);
+      return;
+    }
+
+    // Delete: handle manually to avoid contenteditable DOM corruption
+    if (e.key === "Delete" && !isMod && !e.altKey) {
+      e.preventDefault();
+      const text = lastContent;
+      const { start, end } = getSelectionRange(editorEl);
+      if (start < 0) return;
+
+      let newText: string;
+      let newCursor: number;
+      if (start !== end) {
+        // Delete selection
+        newText = text.slice(0, start) + text.slice(end);
+        newCursor = start;
+      } else {
+        if (start >= text.length) return;
+        newText = text.slice(0, start) + text.slice(start + 1);
+        newCursor = start;
+      }
+
+      lastContent = newText;
+      renderHighlightedContent(editorEl, newText);
+      setCursorOffset(editorEl, newCursor);
+      onContentChange(newText);
+      return;
     }
   }
 
