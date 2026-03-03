@@ -29,6 +29,32 @@
   let findInputEl: HTMLInputElement | undefined = $state();
   let lastContent = "";
 
+  // Undo/redo stack
+  interface UndoEntry {
+    text: string;
+    cursor: number;
+  }
+  let undoStack: UndoEntry[] = [];
+  let redoStack: UndoEntry[] = [];
+  const MAX_UNDO = 200;
+
+  function pushUndo(text: string, cursor: number): void {
+    // Don't push if identical to top of stack
+    if (undoStack.length > 0 && undoStack[undoStack.length - 1].text === text) return;
+    undoStack.push({ text, cursor });
+    if (undoStack.length > MAX_UNDO) undoStack.shift();
+    redoStack = [];
+  }
+
+  function applyEdit(newText: string, newCursor: number): void {
+    lastContent = newText;
+    if (editorEl) {
+      renderHighlightedContent(editorEl, newText);
+      setCursorOffset(editorEl, newCursor);
+    }
+    onContentChange(newText);
+  }
+
   // Collect line divs (excluding image overlays and other non-content elements)
   function getLineDivs(el: HTMLDivElement): HTMLElement[] {
     const divs: HTMLElement[] = [];
@@ -209,10 +235,8 @@
     const newText = getPlainText(editorEl);
 
     if (newText !== lastContent) {
-      lastContent = newText;
-      renderHighlightedContent(editorEl, newText);
-      setCursorOffset(editorEl, cursorPos);
-      onContentChange(newText);
+      pushUndo(lastContent, cursorPos);
+      applyEdit(newText, cursorPos);
     }
   }
 
@@ -221,6 +245,28 @@
 
     const isMod =
       navigator.platform?.includes("Mac") ? e.metaKey : e.ctrlKey;
+
+    // Undo: Cmd+Z
+    if (isMod && e.key === "z" && !e.shiftKey) {
+      e.preventDefault();
+      if (undoStack.length === 0) return;
+      const current = { text: lastContent, cursor: getCursorOffset(editorEl) };
+      const entry = undoStack.pop()!;
+      redoStack.push(current);
+      applyEdit(entry.text, entry.cursor);
+      return;
+    }
+
+    // Redo: Cmd+Shift+Z
+    if (isMod && e.key === "z" && e.shiftKey) {
+      e.preventDefault();
+      if (redoStack.length === 0) return;
+      const current = { text: lastContent, cursor: getCursorOffset(editorEl) };
+      const entry = redoStack.pop()!;
+      undoStack.push(current);
+      applyEdit(entry.text, entry.cursor);
+      return;
+    }
 
     // Find: Cmd+F
     if (isMod && e.key === "f" && !e.shiftKey) {
@@ -244,7 +290,7 @@
     if (e.key === "Tab") {
       e.preventDefault();
       const cursorPos = getCursorOffset(editorEl);
-      const text = getPlainText(editorEl);
+      const text = lastContent;
       const indent = e.shiftKey ? "" : "  ";
 
       if (e.shiftKey) {
@@ -253,19 +299,15 @@
         const lineStart = before.lastIndexOf("\n") + 1;
         const line = text.slice(lineStart);
         if (line.startsWith("  ")) {
+          pushUndo(text, cursorPos);
           const newText = text.slice(0, lineStart) + line.slice(2);
-          lastContent = newText;
-          renderHighlightedContent(editorEl, newText);
-          setCursorOffset(editorEl, Math.max(lineStart, cursorPos - 2));
-          onContentChange(newText);
+          applyEdit(newText, Math.max(lineStart, cursorPos - 2));
         }
       } else {
+        pushUndo(text, cursorPos);
         const newText =
           text.slice(0, cursorPos) + indent + text.slice(cursorPos);
-        lastContent = newText;
-        renderHighlightedContent(editorEl, newText);
-        setCursorOffset(editorEl, cursorPos + indent.length);
-        onContentChange(newText);
+        applyEdit(newText, cursorPos + indent.length);
       }
       return;
     }
@@ -273,15 +315,13 @@
     // Enter: list continuation
     if (e.key === "Enter" && !e.shiftKey) {
       const cursorPos = getCursorOffset(editorEl);
-      const text = getPlainText(editorEl);
+      const text = lastContent;
       const result = handleListContinuation(text, cursorPos);
 
       if (result.handled && result.newText !== undefined) {
         e.preventDefault();
-        lastContent = result.newText;
-        renderHighlightedContent(editorEl, result.newText);
-        setCursorOffset(editorEl, result.cursorOffset || cursorPos);
-        onContentChange(result.newText);
+        pushUndo(text, cursorPos);
+        applyEdit(result.newText, result.cursorOffset || cursorPos);
         return;
       }
     }
@@ -296,7 +336,6 @@
       let newText: string;
       let newCursor: number;
       if (start !== end) {
-        // Delete selection
         newText = text.slice(0, start) + text.slice(end);
         newCursor = start;
       } else {
@@ -305,10 +344,8 @@
         newCursor = start - 1;
       }
 
-      lastContent = newText;
-      renderHighlightedContent(editorEl, newText);
-      setCursorOffset(editorEl, newCursor);
-      onContentChange(newText);
+      pushUndo(text, start);
+      applyEdit(newText, newCursor);
       return;
     }
 
@@ -322,7 +359,6 @@
       let newText: string;
       let newCursor: number;
       if (start !== end) {
-        // Delete selection
         newText = text.slice(0, start) + text.slice(end);
         newCursor = start;
       } else {
@@ -331,10 +367,8 @@
         newCursor = start;
       }
 
-      lastContent = newText;
-      renderHighlightedContent(editorEl, newText);
-      setCursorOffset(editorEl, newCursor);
-      onContentChange(newText);
+      pushUndo(text, start);
+      applyEdit(newText, newCursor);
       return;
     }
   }
@@ -358,9 +392,8 @@
       const clickOffset = getCursorOffset(editorEl);
       const result = handleCheckboxClick(text, clickOffset);
       if (result.changed) {
-        lastContent = result.newText;
-        renderHighlightedContent(editorEl, result.newText);
-        onContentChange(result.newText);
+        pushUndo(text, clickOffset);
+        applyEdit(result.newText, clickOffset);
       }
     }
   }
@@ -373,13 +406,11 @@
     if (markdown) {
       e.preventDefault();
       const cursorPos = getCursorOffset(editorEl);
-      const text = getPlainText(editorEl);
+      const text = lastContent;
+      pushUndo(text, cursorPos);
       const newText =
         text.slice(0, cursorPos) + markdown + text.slice(cursorPos);
-      lastContent = newText;
-      renderHighlightedContent(editorEl, newText);
-      setCursorOffset(editorEl, cursorPos + markdown.length);
-      onContentChange(newText);
+      applyEdit(newText, cursorPos + markdown.length);
       return;
     }
 
@@ -388,13 +419,11 @@
     const pasteText = e.clipboardData.getData("text/plain");
     if (pasteText) {
       const cursorPos = getCursorOffset(editorEl);
-      const text = getPlainText(editorEl);
+      const text = lastContent;
+      pushUndo(text, cursorPos);
       const newText =
         text.slice(0, cursorPos) + pasteText + text.slice(cursorPos);
-      lastContent = newText;
-      renderHighlightedContent(editorEl, newText);
-      setCursorOffset(editorEl, cursorPos + pasteText.length);
-      onContentChange(newText);
+      applyEdit(newText, cursorPos + pasteText.length);
     }
   }
 
@@ -405,13 +434,11 @@
     if (markdown) {
       e.preventDefault();
       const cursorPos = getCursorOffset(editorEl);
-      const text = getPlainText(editorEl);
+      const text = lastContent;
+      pushUndo(text, cursorPos);
       const newText =
         text.slice(0, cursorPos) + markdown + text.slice(cursorPos);
-      lastContent = newText;
-      renderHighlightedContent(editorEl, newText);
-      setCursorOffset(editorEl, cursorPos + markdown.length);
-      onContentChange(newText);
+      applyEdit(newText, cursorPos + markdown.length);
     }
   }
 
@@ -462,9 +489,16 @@
     editorEl?.focus();
   }
 
-  // Reactively update editor when content changes externally
+  // Reactively update editor when content changes externally (e.g. note switch)
   $effect(() => {
     if (editorEl && content !== lastContent) {
+      // Reset undo stack on note switch (large content change)
+      const isNoteSwitch = Math.abs(content.length - lastContent.length) > lastContent.length * 0.5
+        || lastContent === "";
+      if (isNoteSwitch) {
+        undoStack = [];
+        redoStack = [];
+      }
       lastContent = content;
       const cursorPos = getCursorOffset(editorEl);
       renderHighlightedContent(editorEl, content);
