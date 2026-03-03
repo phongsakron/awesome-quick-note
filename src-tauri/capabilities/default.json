@@ -27,6 +27,7 @@
     "core:window:allow-is-visible",
     "core:window:allow-outer-position",
     "core:window:allow-current-monitor",
+    "core:window:allow-start-dragging",
     "core:event:default",
     "core:event:allow-listen",
     "core:event:allow-emit"

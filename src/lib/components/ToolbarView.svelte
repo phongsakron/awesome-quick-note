@@ -1,6 +1,7 @@
 <script lang="ts">
   import { gitSyncStatus } from "../stores/git-sync";
   import { modifierKey } from "../utils/platform";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
   import GitSyncStatusView from "./GitSyncStatusView.svelte";
 
   interface Props {
@@ -14,9 +15,15 @@
 
   let { onNewNote, onSearch, onSettings, onTogglePin, isPinned, hasNote }: Props = $props();
   const mod = modifierKey();
+
+  function handleDragStart(e: MouseEvent) {
+    // Only drag from the toolbar background, not from buttons
+    if ((e.target as HTMLElement).closest("button")) return;
+    getCurrentWindow().startDragging();
+  }
 </script>
 
-<div class="toolbar">
+<div class="toolbar" onmousedown={handleDragStart}>
   <div class="toolbar-left">
     <button class="toolbar-btn" onclick={onNewNote} title="{mod}+Alt+N">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
