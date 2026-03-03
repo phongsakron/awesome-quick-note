@@ -182,6 +182,8 @@ pub fn run() {
             settings::update_settings,
             settings::get_platform_info,
             image::save_image,
+            image::copy_image_to_clipboard,
+            image::open_file,
             pin::toggle_pin,
             pin::get_pinned_notes,
             shortcuts::register_shortcuts,

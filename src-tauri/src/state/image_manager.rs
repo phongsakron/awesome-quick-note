@@ -18,4 +18,25 @@ impl ImageManager {
         // Return relative markdown image syntax
         Ok(format!("![image](attachments/{})", filename))
     }
+
+    pub fn copy_image_to_clipboard(image_path: &str) -> Result<(), String> {
+        let img = image::open(image_path)
+            .map_err(|e| format!("Failed to open image: {}", e))?;
+        let rgba = img.to_rgba8();
+        let (width, height) = rgba.dimensions();
+
+        let img_data = arboard::ImageData {
+            width: width as usize,
+            height: height as usize,
+            bytes: std::borrow::Cow::Owned(rgba.into_raw()),
+        };
+
+        let mut clipboard = arboard::Clipboard::new()
+            .map_err(|e| format!("Failed to access clipboard: {}", e))?;
+        clipboard
+            .set_image(img_data)
+            .map_err(|e| format!("Failed to copy image: {}", e))?;
+
+        Ok(())
+    }
 }
