@@ -43,7 +43,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 6px 10px;
-    background: rgba(30, 31, 28, var(--panel-opacity, 1));
+    background: var(--monokai-toolbar-background);
     -webkit-app-region: drag;
     min-height: 36px;
   }

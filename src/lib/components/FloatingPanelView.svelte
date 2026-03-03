@@ -206,7 +206,7 @@
 
 </script>
 
-<div class="floating-panel" style="--panel-opacity: {$settings.panel_opacity}; background: rgba(39, 40, 34, var(--panel-opacity))">
+<div class="floating-panel" style="opacity: {$settings.panel_opacity}; background: var(--monokai-background)">
   {#if $activeView === "vault-setup"}
     <VaultSetupView />
   {:else}
