@@ -9,12 +9,10 @@
   import { getPinnedNotes, togglePin } from "../commands/pin";
   import { pinnedNoteIds } from "../stores/pin";
   import { setWindowPosition, getScreenBounds } from "../commands/window";
-  import { addTab, removeTab, updateTabTitle, openTabs } from "../stores/tabs";
   import { debounce } from "../utils/debounce";
   import { listen } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import ToolbarView from "./ToolbarView.svelte";
-  import NoteTabBar from "./NoteTabBar.svelte";
   import SearchView from "./SearchView.svelte";
   import SettingsView from "./SettingsView.svelte";
   import VaultSetupView from "./VaultSetupView.svelte";
@@ -165,7 +163,6 @@
     selectedNote.set(note);
     editingContent.set(note.content);
     editorFocusTrigger.set(true);
-    addTab(note.id, note.title);
   }
 
   async function handleNewNote() {
@@ -207,25 +204,6 @@
     }
   }
 
-  function handleSelectTab(id: string) {
-    const note = $notes.find(n => n.id === id);
-    if (note) {
-      handleSelectNote(note);
-    }
-  }
-
-  function handleCloseTab(id: string): string | null {
-    const nextId = removeTab(id);
-    if (nextId) {
-      return nextId;
-    }
-    // If no tabs left, clear selection
-    if (get(openTabs).length === 0) {
-      selectedNote.set(null);
-      editingContent.set("");
-    }
-    return null;
-  }
 </script>
 
 <div class="floating-panel" style="--panel-opacity: {$settings.panel_opacity}; background: rgba(39, 40, 34, var(--panel-opacity))">
@@ -238,7 +216,6 @@
       onSettings={handleSettings}
     />
     <div class="divider"></div>
-    <NoteTabBar onSelectTab={handleSelectTab} onCloseTab={handleCloseTab} />
 
     {#if $activeView === "settings"}
       <div class="overlay-content">
