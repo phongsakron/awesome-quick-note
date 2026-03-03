@@ -5,6 +5,7 @@ struct SettingsView: View {
     let vaultManager: VaultManager
     let panelController: FloatingPanelController
     @Bindable var fontSettings: FontSettings
+    let gitSyncManager: GitSyncManager
     var onDismiss: () -> Void
 
     var body: some View {
@@ -27,6 +28,11 @@ struct SettingsView: View {
 
                 sectionHeader("Vault")
                 vaultSection
+
+                Divider().background(Monokai.border)
+
+                sectionHeader("Git Sync")
+                gitSyncSection
 
                 Divider().background(Monokai.border)
 
@@ -236,6 +242,82 @@ struct SettingsView: View {
         .padding(12)
         .background(Monokai.tabBackground.opacity(0.5))
         .clipShape(.rect(cornerRadius: 8))
+    }
+
+    private var gitSyncSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Toggle("Enable Git Sync", isOn: Bindable(gitSyncManager).isEnabled)
+                .font(.system(size: 13))
+                .foregroundStyle(Monokai.foreground)
+                .toggleStyle(.switch)
+                .tint(Monokai.string)
+
+            if gitSyncManager.isEnabled {
+                HStack(spacing: 6) {
+                    statusIndicator
+                    Text(statusText)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Monokai.comment)
+                        .lineLimit(2)
+                }
+
+                if let date = gitSyncManager.lastSyncDate {
+                    Text("Last sync: \(date.formatted(date: .abbreviated, time: .shortened))")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Monokai.comment)
+                }
+
+                if case .error = gitSyncManager.status {
+                    Button("Retry Sync") {
+                        gitSyncManager.manualSync()
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(Monokai.keyword)
+                }
+            }
+        }
+        .padding(12)
+        .background(Monokai.tabBackground.opacity(0.5))
+        .clipShape(.rect(cornerRadius: 8))
+    }
+
+    @ViewBuilder
+    private var statusIndicator: some View {
+        switch gitSyncManager.status {
+        case .idle:
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(Monokai.string)
+                .font(.system(size: 12))
+        case .syncing:
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .foregroundStyle(Monokai.function)
+                .font(.system(size: 12))
+        case .error:
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(Monokai.keyword)
+                .font(.system(size: 12))
+        case .noRemote:
+            Image(systemName: "internaldrive")
+                .foregroundStyle(Monokai.comment)
+                .font(.system(size: 12))
+        case .notARepo:
+            Image(systemName: "xmark.circle")
+                .foregroundStyle(Monokai.comment)
+                .font(.system(size: 12))
+        case .disabled:
+            EmptyView()
+        }
+    }
+
+    private var statusText: String {
+        switch gitSyncManager.status {
+        case .idle: return "Connected and synced"
+        case .syncing: return "Syncing..."
+        case .error(let msg): return msg
+        case .noRemote: return "Local commits only — no remote configured"
+        case .notARepo: return "Vault is not a Git repository"
+        case .disabled: return ""
+        }
     }
 
     private var aboutSection: some View {
