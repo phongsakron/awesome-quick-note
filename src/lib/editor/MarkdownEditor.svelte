@@ -442,16 +442,91 @@
     }
   }
 
+  // Resolve a text offset to a DOM position (node + offset within that node)
+  function textOffsetToDomPos(
+    offset: number,
+    lineDivs: HTMLElement[],
+  ): { node: Node; offset: number } | null {
+    let current = 0;
+    for (let i = 0; i < lineDivs.length; i++) {
+      if (i > 0) current += 1; // newline
+      const lineDiv = lineDivs[i];
+      const lineLen = lineDiv.textContent?.length || 0;
+
+      if (current + lineLen >= offset) {
+        const targetInLine = offset - current;
+        const walker = document.createTreeWalker(lineDiv, NodeFilter.SHOW_TEXT);
+        let innerCurrent = 0;
+        while (walker.nextNode()) {
+          const node = walker.currentNode as Text;
+          const len = node.textContent?.length || 0;
+          if (innerCurrent + len >= targetInLine) {
+            return { node, offset: targetInLine - innerCurrent };
+          }
+          innerCurrent += len;
+        }
+        return { node: lineDiv, offset: 0 };
+      }
+      current += lineLen;
+    }
+    return null;
+  }
+
+  // Remove find highlight marks, restoring original text nodes
+  function clearFindHighlights(): void {
+    if (!editorEl) return;
+    editorEl.querySelectorAll("mark.find-highlight").forEach((mark) => {
+      const parent = mark.parentNode;
+      if (!parent) return;
+      while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
+      parent.removeChild(mark);
+      parent.normalize();
+    });
+  }
+
+  // Highlight the current find match with a <mark> and scroll into view
+  function highlightCurrentMatch(): void {
+    if (!editorEl) return;
+    clearFindHighlights();
+
+    if (!findState.isActive || findState.currentIndex < 0) return;
+    const match = findState.matches[findState.currentIndex];
+    if (!match) return;
+
+    const lineDivs = getLineDivs(editorEl);
+    const startPos = textOffsetToDomPos(match.start, lineDivs);
+    const endPos = textOffsetToDomPos(match.end, lineDivs);
+    if (!startPos || !endPos) return;
+
+    try {
+      const range = document.createRange();
+      range.setStart(startPos.node, startPos.offset);
+      range.setEnd(endPos.node, endPos.offset);
+
+      const mark = document.createElement("mark");
+      mark.className = "find-highlight";
+      range.surroundContents(mark);
+      mark.scrollIntoView({ block: "center", behavior: "smooth" });
+    } catch {
+      // surroundContents fails if match crosses element boundaries — just scroll the line
+      if (startPos.node.parentElement) {
+        startPos.node.parentElement.scrollIntoView({ block: "center", behavior: "smooth" });
+      }
+    }
+  }
+
   // Find bar actions
   function updateFind(): void {
     findState.matches = findMatches(content, findState.query);
     findState.currentIndex = findState.matches.length > 0 ? 0 : -1;
+    highlightCurrentMatch();
   }
 
   function findNext(): void {
     if (findState.matches.length === 0) return;
     findState.currentIndex =
       (findState.currentIndex + 1) % findState.matches.length;
+    highlightCurrentMatch();
   }
 
   function findPrev(): void {
@@ -459,6 +534,7 @@
     findState.currentIndex =
       (findState.currentIndex - 1 + findState.matches.length) %
       findState.matches.length;
+    highlightCurrentMatch();
   }
 
   function doReplace(): void {
@@ -481,6 +557,7 @@
   }
 
   function closeFindBar(): void {
+    clearFindHighlights();
     findState.isActive = false;
     findState.query = "";
     findState.replaceWith = "";
@@ -706,5 +783,12 @@
 
   :global(.image-overlay-btn:hover) {
     color: var(--monokai-foreground);
+  }
+
+  :global(mark.find-highlight) {
+    background: rgba(230, 219, 116, 0.4);
+    color: inherit;
+    border-radius: 2px;
+    padding: 0;
   }
 </style>
