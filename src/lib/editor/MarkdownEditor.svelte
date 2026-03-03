@@ -55,13 +55,14 @@
     onContentChange(newText);
   }
 
-  // Collect line divs (excluding image overlays and other non-content elements)
+  // Collect line divs (excluding image overlays, button containers, and other non-content elements)
   function getLineDivs(el: HTMLDivElement): HTMLElement[] {
     const divs: HTMLElement[] = [];
     for (const child of el.children) {
       if (
         child.tagName === "DIV" &&
-        !child.classList.contains("image-overlay")
+        !child.classList.contains("image-overlay") &&
+        !child.classList.contains("code-block-buttons")
       ) {
         divs.push(child as HTMLElement);
       }
@@ -219,10 +220,11 @@
     for (let i = 0; i < children.length; i++) {
       const child = children[i];
 
-      // Skip image overlays
+      // Skip image overlays and button containers
       if (
         child.nodeType === Node.ELEMENT_NODE &&
-        (child as HTMLElement).classList.contains("image-overlay")
+        ((child as HTMLElement).classList.contains("image-overlay") ||
+         (child as HTMLElement).classList.contains("code-block-buttons"))
       ) {
         continue;
       }
@@ -246,6 +248,8 @@
     return text;
   }
 
+  let copyButtonTimeout: ReturnType<typeof setTimeout> | undefined;
+
   function renderHighlightedContent(el: HTMLDivElement, text: string): void {
     const lines = highlightMarkdown(text);
 
@@ -256,8 +260,11 @@
       })
       .join("");
 
-    // Add code block copy buttons
-    addCopyButtons(el);
+    // Debounce code block buttons — only add after typing stops
+    clearTimeout(copyButtonTimeout);
+    copyButtonTimeout = setTimeout(() => {
+      addCopyButtons(el);
+    }, 500);
 
     // Add image overlays
     updateImageOverlays(el, vaultPath);
@@ -347,18 +354,23 @@
       return;
     }
 
-    // Enter: list continuation
+    // Enter: handle manually to avoid contenteditable DOM issues
     if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
       const cursorPos = getCursorOffset(editorEl);
       const text = lastContent;
       const result = handleListContinuation(text, cursorPos);
 
       if (result.handled && result.newText !== undefined) {
-        e.preventDefault();
         pushUndo(text, cursorPos);
         applyEdit(result.newText, result.cursorOffset || cursorPos);
-        return;
+      } else {
+        // Default: insert newline
+        pushUndo(text, cursorPos);
+        const newText = text.slice(0, cursorPos) + "\n" + text.slice(cursorPos);
+        applyEdit(newText, cursorPos + 1);
       }
+      return;
     }
 
     // Backspace: handle manually to avoid contenteditable DOM corruption
@@ -759,38 +771,26 @@
     background: var(--monokai-tab-background);
   }
 
-  :global(.code-copy-btn) {
-    position: absolute;
-    top: 2px;
-    right: 4px;
-    background: var(--monokai-tab-background);
-    border: 1px solid var(--monokai-border);
-    color: var(--monokai-comment);
-    padding: 1px 6px;
-    border-radius: 3px;
-    font-size: 10px;
-    cursor: pointer;
-    z-index: 1;
+  :global(.code-block-buttons) {
+    display: flex;
+    gap: 4px;
+    justify-content: flex-end;
+    padding: 2px 8px;
+    background: var(--monokai-codeblock-bg);
   }
 
-  :global(.code-copy-btn:hover) {
-    color: var(--monokai-foreground);
-  }
-
+  :global(.code-copy-btn),
   :global(.code-format-btn) {
-    position: absolute;
-    top: 2px;
-    right: 52px;
     background: var(--monokai-tab-background);
     border: 1px solid var(--monokai-border);
     color: var(--monokai-comment);
-    padding: 1px 6px;
+    padding: 1px 8px;
     border-radius: 3px;
     font-size: 10px;
     cursor: pointer;
-    z-index: 1;
   }
 
+  :global(.code-copy-btn:hover),
   :global(.code-format-btn:hover) {
     color: var(--monokai-foreground);
   }

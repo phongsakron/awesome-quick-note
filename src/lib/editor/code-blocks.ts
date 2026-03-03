@@ -1,60 +1,60 @@
 /**
  * Code block enhancements: copy button and format button overlays.
+ * Uses prettier/standalone for formatting (loaded on demand).
  */
 
-const FORMATTABLE_LANGS = new Set([
-  "json",
-  "xml",
-  "html",
-  "js",
-  "javascript",
-  "ts",
-  "typescript",
-]);
+const LANG_TO_PRETTIER: Record<string, { parser: string; plugin: () => Promise<any> }> = {
+  json: { parser: "json", plugin: () => import("prettier/plugins/babel") },
+  js: { parser: "babel", plugin: () => import("prettier/plugins/babel") },
+  javascript: { parser: "babel", plugin: () => import("prettier/plugins/babel") },
+  ts: { parser: "typescript", plugin: () => import("prettier/plugins/typescript") },
+  typescript: { parser: "typescript", plugin: () => import("prettier/plugins/typescript") },
+  html: { parser: "html", plugin: () => import("prettier/plugins/html") },
+  xml: { parser: "html", plugin: () => import("prettier/plugins/html") },
+  css: { parser: "css", plugin: () => import("prettier/plugins/postcss") },
+  scss: { parser: "scss", plugin: () => import("prettier/plugins/postcss") },
+  less: { parser: "less", plugin: () => import("prettier/plugins/postcss") },
+  md: { parser: "markdown", plugin: () => import("prettier/plugins/markdown") },
+  markdown: { parser: "markdown", plugin: () => import("prettier/plugins/markdown") },
+  yaml: { parser: "yaml", plugin: () => import("prettier/plugins/yaml") },
+  yml: { parser: "yaml", plugin: () => import("prettier/plugins/yaml") },
+};
 
-function formatCode(code: string, lang: string): string | null {
+async function formatCode(code: string, lang: string): Promise<string | null> {
+  const config = LANG_TO_PRETTIER[lang];
+  if (!config) return null;
+
   try {
-    if (lang === "json") {
-      return JSON.stringify(JSON.parse(code), null, 2);
+    const [prettier, plugin] = await Promise.all([
+      import("prettier/standalone"),
+      config.plugin(),
+    ]);
+    // For babel parser, also need estree plugin
+    const plugins = [plugin];
+    if (config.parser === "babel" || config.parser === "json") {
+      const estree = await import("prettier/plugins/estree");
+      plugins.push(estree);
     }
-    if (lang === "xml" || lang === "html") {
-      return formatXml(code);
+    if (config.parser === "typescript") {
+      const estree = await import("prettier/plugins/estree");
+      plugins.push(estree);
     }
-    // For JS/TS, try JSON parse as best-effort
-    if (["js", "javascript", "ts", "typescript"].includes(lang)) {
-      return JSON.stringify(JSON.parse(code), null, 2);
-    }
+
+    const formatted = await prettier.format(code, {
+      parser: config.parser,
+      plugins,
+      tabWidth: 2,
+      printWidth: 80,
+    });
+    return formatted.trimEnd();
   } catch {
     return null;
   }
-  return null;
-}
-
-function formatXml(xml: string): string {
-  let formatted = "";
-  let indent = 0;
-  const parts = xml.replace(/(>)(<)/g, "$1\n$2").split("\n");
-  for (const part of parts) {
-    const trimmed = part.trim();
-    if (!trimmed) continue;
-    if (trimmed.startsWith("</")) indent--;
-    formatted += "  ".repeat(Math.max(0, indent)) + trimmed + "\n";
-    if (
-      trimmed.startsWith("<") &&
-      !trimmed.startsWith("</") &&
-      !trimmed.endsWith("/>") &&
-      !trimmed.includes("</")
-    ) {
-      indent++;
-    }
-  }
-  return formatted.trimEnd();
 }
 
 export function addCopyButtons(editorEl: HTMLDivElement): void {
-  // Remove existing copy and format buttons
-  editorEl.querySelectorAll(".code-copy-btn").forEach((btn) => btn.remove());
-  editorEl.querySelectorAll(".code-format-btn").forEach((btn) => btn.remove());
+  // Remove existing button containers
+  editorEl.querySelectorAll(".code-block-buttons").forEach((el) => el.remove());
 
   // Find code block fences and add copy buttons
   const fences = editorEl.querySelectorAll(".md-codeblock-fence");
@@ -76,44 +76,33 @@ export function addCopyButtons(editorEl: HTMLDivElement): void {
     }
 
     if (codeContent) {
-      const btn = document.createElement("button");
-      btn.className = "code-copy-btn";
-      btn.textContent = "Copy";
-      btn.contentEditable = "false";
-      btn.onclick = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        navigator.clipboard.writeText(codeContent);
-        btn.textContent = "Copied!";
-        setTimeout(() => {
-          btn.textContent = "Copy";
-        }, 1500);
-      };
-
-      // Position relative to the opening fence line
       const fenceLine = openFence.parentElement;
-      if (fenceLine) {
-        fenceLine.style.position = "relative";
-        fenceLine.appendChild(btn);
-      }
+      if (!fenceLine) { i += 2; continue; }
 
-      // Detect language and add format button if supported
-      const fenceText = openFence.textContent?.trim() || "";
-      const langMatch = fenceText.match(/^```(\w+)/);
-      const lang = langMatch ? langMatch[1].toLowerCase() : "";
+      // Create button container div
+      const btnContainer = document.createElement("div");
+      btnContainer.className = "code-block-buttons";
+      btnContainer.contentEditable = "false";
 
-      if (FORMATTABLE_LANGS.has(lang)) {
+      // Detect language from the lang span sibling
+      const langSpan = fenceLine.querySelector(".md-codeblock-lang");
+      const lang = (langSpan?.textContent?.trim() || "").toLowerCase();
+
+      // Format button (if language is supported)
+      if (lang in LANG_TO_PRETTIER) {
         const fmtBtn = document.createElement("button");
         fmtBtn.className = "code-format-btn";
         fmtBtn.textContent = "Format";
-        fmtBtn.contentEditable = "false";
-        fmtBtn.onclick = (e) => {
+        fmtBtn.onclick = async (e) => {
           e.preventDefault();
           e.stopPropagation();
+
+          fmtBtn.textContent = "Formatting...";
+
           // Re-collect current code content (may have changed)
           let currentCode = "";
-          let codeEl = openFence.parentElement?.nextElementSibling;
-          while (codeEl && !codeEl.contains(closeFence)) {
+          let codeEl = fenceLine.nextElementSibling;
+          while (codeEl && !codeEl.contains(closeFence) && !codeEl.classList.contains("code-block-buttons")) {
             const codeSpan = codeEl.querySelector(".md-codeblock-content");
             if (codeSpan) {
               if (currentCode) currentCode += "\n";
@@ -122,13 +111,11 @@ export function addCopyButtons(editorEl: HTMLDivElement): void {
             codeEl = codeEl.nextElementSibling;
           }
 
-          const formatted = formatCode(currentCode, lang);
+          const formatted = await formatCode(currentCode, lang);
           if (formatted && formatted !== currentCode) {
-            // Replace code content in editor elements
-            // First, collect existing code line elements
             const codeLineEls: HTMLElement[] = [];
-            let walkEl = openFence.parentElement?.nextElementSibling;
-            while (walkEl && !walkEl.contains(closeFence)) {
+            let walkEl = fenceLine.nextElementSibling;
+            while (walkEl && !walkEl.contains(closeFence) && !walkEl.classList.contains("code-block-buttons")) {
               const codeSpan = walkEl.querySelector(
                 ".md-codeblock-content",
               ) as HTMLElement | null;
@@ -139,40 +126,46 @@ export function addCopyButtons(editorEl: HTMLDivElement): void {
             }
 
             const codeLines = formatted.split("\n");
-            // Update existing lines and add/remove as needed
             for (let idx = 0; idx < codeLines.length; idx++) {
               if (idx < codeLineEls.length) {
                 codeLineEls[idx].textContent = codeLines[idx];
               }
             }
-            // If formatted has fewer lines, clear extra lines
             for (let idx = codeLines.length; idx < codeLineEls.length; idx++) {
               codeLineEls[idx].textContent = "";
             }
 
-            // Trigger input event so editor picks up changes
             editorEl.dispatchEvent(new Event("input", { bubbles: true }));
             fmtBtn.textContent = "Formatted!";
-            setTimeout(() => {
-              fmtBtn.textContent = "Format";
-            }, 1500);
+            setTimeout(() => { fmtBtn.textContent = "Format"; }, 1500);
           } else if (formatted === null) {
             fmtBtn.textContent = "Error";
-            setTimeout(() => {
-              fmtBtn.textContent = "Format";
-            }, 1500);
+            setTimeout(() => { fmtBtn.textContent = "Format"; }, 1500);
           } else {
             fmtBtn.textContent = "No change";
-            setTimeout(() => {
-              fmtBtn.textContent = "Format";
-            }, 1500);
+            setTimeout(() => { fmtBtn.textContent = "Format"; }, 1500);
           }
         };
+        btnContainer.appendChild(fmtBtn);
+      }
 
-        const fmtFenceLine = openFence.parentElement;
-        if (fmtFenceLine) {
-          fmtFenceLine.appendChild(fmtBtn);
-        }
+      // Copy button
+      const copyBtn = document.createElement("button");
+      copyBtn.className = "code-copy-btn";
+      copyBtn.textContent = "Copy";
+      copyBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        navigator.clipboard.writeText(codeContent);
+        copyBtn.textContent = "Copied!";
+        setTimeout(() => { copyBtn.textContent = "Copy"; }, 1500);
+      };
+      btnContainer.appendChild(copyBtn);
+
+      // Insert button container before the closing fence line
+      const closeFenceLine = closeFence.parentElement;
+      if (closeFenceLine) {
+        closeFenceLine.before(btnContainer);
       }
     }
 
