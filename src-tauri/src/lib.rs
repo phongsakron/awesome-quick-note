@@ -7,7 +7,8 @@ pub mod state;
 use commands::{git_sync, image, pin, search, settings, shortcuts, vault, window};
 use state::{
     git_sync_manager::GitSyncManager, pin_manager::PinManager,
-    settings_manager::SettingsManager, vault_manager::VaultManager,
+    recent_manager::RecentManager, settings_manager::SettingsManager,
+    vault_manager::VaultManager,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -71,7 +72,8 @@ pub fn run() {
 
             let settings_manager = SettingsManager::new(config_dir.clone());
             let vault_manager = VaultManager::new();
-            let pin_manager = PinManager::new(config_dir);
+            let pin_manager = PinManager::new(config_dir.clone());
+            let recent_manager = RecentManager::new(config_dir);
             let git_sync_manager = Arc::new(GitSyncManager::new());
 
             // Restore vault from settings
@@ -127,6 +129,7 @@ pub fn run() {
             app.manage(settings_manager);
             app.manage(vault_manager);
             app.manage(pin_manager);
+            app.manage(recent_manager);
             app.manage(git_sync_manager);
 
             // macOS: Set window to join all spaces
@@ -174,6 +177,7 @@ pub fn run() {
             vault::create_vault,
             vault::save_note,
             vault::delete_note,
+            vault::record_note_opened,
             search::search_notes,
             git_sync::get_git_sync_status,
             git_sync::manual_sync,
