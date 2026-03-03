@@ -8,6 +8,7 @@
   import { setGitSyncEnabled } from "../commands/git-sync";
   import { revealInFileManager, setWindowPosition, getScreenBounds } from "../commands/window";
   import { registerShortcuts } from "../commands/shortcuts";
+  import { checkForUpdates } from "../commands/updater";
 
   interface Props {
     onDismiss: () => void;
@@ -298,6 +299,7 @@
       <h4>About</h4>
       <p>SideNote v0.1.0</p>
       <p class="setting-description">A quick markdown note-taking app.</p>
+      <button class="small-btn update-btn" onclick={() => checkForUpdates(false)}>Check for Updates</button>
     </section>
   </div>
 </div>
@@ -510,5 +512,9 @@
 
   .about p {
     font-size: 13px;
+  }
+
+  .update-btn {
+    margin-top: 8px;
   }
 </style>
