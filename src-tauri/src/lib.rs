@@ -1,8 +1,10 @@
+#![allow(unexpected_cfgs)]
+
 pub mod commands;
 pub mod models;
 pub mod state;
 
-use commands::{git_sync, image, pin, search, settings, vault};
+use commands::{git_sync, image, pin, search, settings, shortcuts, vault, window};
 use state::{
     git_sync_manager::GitSyncManager, pin_manager::PinManager,
     settings_manager::SettingsManager, vault_manager::VaultManager,
@@ -127,6 +129,40 @@ pub fn run() {
             app.manage(pin_manager);
             app.manage(git_sync_manager);
 
+            // macOS: Set window to join all spaces
+            #[cfg(target_os = "macos")]
+            {
+                extern crate objc;
+                use objc::{msg_send, sel, sel_impl};
+
+                if let Some(window) = app.get_webview_window("main") {
+                    if let Ok(ns_window) = window.ns_window() {
+                        unsafe {
+                            // NSWindowCollectionBehaviorCanJoinAllSpaces (1 << 0)
+                            // | NSWindowCollectionBehaviorFullScreenAuxiliary (1 << 8)
+                            let behavior: u64 = (1 << 0) | (1 << 8);
+                            let _: () = msg_send![ns_window as *mut objc::runtime::Object, setCollectionBehavior: behavior];
+                        }
+                    }
+                }
+            }
+
+            // Restore panel position from settings (logical coordinates)
+            {
+                let settings_mgr: tauri::State<SettingsManager> = app.state();
+                let s = settings_mgr.get();
+                if let (Some(x), Some(y)) = (s.panel_x, s.panel_y) {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.set_position(tauri::Position::Logical(
+                            tauri::LogicalPosition::new(x as f64, y as f64),
+                        ));
+                    }
+                }
+            }
+
+            // Register global shortcuts
+            shortcuts::register_shortcuts(app.handle().clone()).ok();
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -135,6 +171,7 @@ pub fn run() {
             vault::get_vault_path,
             vault::get_notes,
             vault::create_note,
+            vault::create_vault,
             vault::save_note,
             vault::delete_note,
             search::search_notes,
@@ -147,6 +184,11 @@ pub fn run() {
             image::save_image,
             pin::toggle_pin,
             pin::get_pinned_notes,
+            shortcuts::register_shortcuts,
+            window::get_window_position,
+            window::set_window_position,
+            window::get_screen_bounds,
+            window::reveal_in_file_manager,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

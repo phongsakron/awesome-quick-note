@@ -494,8 +494,46 @@
     color: var(--monokai-foreground);
   }
 
+  :global(.code-format-btn) {
+    position: absolute;
+    top: 2px;
+    right: 52px;
+    background: var(--monokai-tab-background);
+    border: 1px solid var(--monokai-border);
+    color: var(--monokai-comment);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    cursor: pointer;
+    z-index: 1;
+  }
+
+  :global(.code-format-btn:hover) {
+    color: var(--monokai-foreground);
+  }
+
   :global(.image-overlay) {
     padding: 4px 0;
     user-select: none;
+  }
+
+  :global(.image-overlay-buttons) {
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
+  }
+
+  :global(.image-overlay-btn) {
+    background: var(--monokai-tab-background);
+    border: 1px solid var(--monokai-border);
+    color: var(--monokai-comment);
+    padding: 1px 8px;
+    border-radius: 3px;
+    font-size: 10px;
+    cursor: pointer;
+  }
+
+  :global(.image-overlay-btn:hover) {
+    color: var(--monokai-foreground);
   }
 </style>

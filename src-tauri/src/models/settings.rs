@@ -21,6 +21,7 @@ pub struct ShortcutSettings {
     pub new_note: String,
     pub search_notes: String,
     pub toggle_pin: String,
+    pub reset_position: String,
 }
 
 impl Default for AppSettings {
@@ -48,6 +49,7 @@ impl Default for ShortcutSettings {
             new_note: "CmdOrCtrl+Alt+N".to_string(),
             search_notes: "CmdOrCtrl+Shift+F".to_string(),
             toggle_pin: "CmdOrCtrl+Alt+P".to_string(),
+            reset_position: "CmdOrCtrl+Shift+R".to_string(),
         }
     }
 }

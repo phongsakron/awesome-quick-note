@@ -1,27 +1,36 @@
 <script lang="ts">
-  import { selectVault, setVault, getNotes } from "../commands/vault";
+  import { selectVault, setVault, getNotes, createVault } from "../commands/vault";
   import { vaultPath, notes, selectedNote, editingContent } from "../stores/vault";
   import { activeView, editorFocusTrigger } from "../stores/ui";
   import { updateSettings } from "../commands/settings";
 
+  async function initVault(path: string) {
+    await setVault(path);
+    vaultPath.set(path);
+    await updateSettings({ vault_path: path });
+
+    const loaded = await getNotes();
+    notes.set(loaded);
+    if (loaded.length > 0) {
+      selectedNote.set(loaded[0]);
+      editingContent.set(loaded[0].content);
+      editorFocusTrigger.set(true);
+    }
+
+    activeView.set("editor");
+  }
+
   async function handleSelectVault() {
     const path = await selectVault();
     if (path) {
-      // Initialize the Rust VaultManager with the selected path
-      await setVault(path);
-      vaultPath.set(path);
-      await updateSettings({ vault_path: path });
+      await initVault(path);
+    }
+  }
 
-      // Load notes from the newly set vault
-      const loaded = await getNotes();
-      notes.set(loaded);
-      if (loaded.length > 0) {
-        selectedNote.set(loaded[0]);
-        editingContent.set(loaded[0].content);
-        editorFocusTrigger.set(true);
-      }
-
-      activeView.set("editor");
+  async function handleCreateVault() {
+    const path = await createVault();
+    if (path) {
+      await initVault(path);
     }
   }
 </script>
@@ -35,6 +44,9 @@
     <p>Select a folder to store your markdown notes.</p>
     <button class="select-btn" onclick={handleSelectVault}>
       Select Vault Folder
+    </button>
+    <button class="create-btn" onclick={handleCreateVault}>
+      Create New Vault
     </button>
   </div>
 </div>
@@ -86,5 +98,21 @@
 
   .select-btn:hover {
     opacity: 0.85;
+  }
+
+  .create-btn {
+    background: none;
+    color: var(--monokai-foreground);
+    border: 1px solid var(--monokai-border);
+    padding: 8px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: background 0.15s;
+  }
+
+  .create-btn:hover {
+    background: var(--monokai-tab-background);
   }
 </style>

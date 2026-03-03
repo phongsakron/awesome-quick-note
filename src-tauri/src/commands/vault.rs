@@ -70,6 +70,29 @@ pub fn save_note(
 }
 
 #[tauri::command]
+pub async fn create_vault(app: AppHandle) -> Result<Option<String>, String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+
+    app.dialog()
+        .file()
+        .set_title("Create New Vault")
+        .pick_folder(move |path| {
+            let _ = tx.send(path.map(|p| p.to_string()));
+        });
+
+    let selected = rx.recv().map_err(|e| e.to_string())?;
+
+    if let Some(ref path_str) = selected {
+        let path = std::path::Path::new(path_str);
+        if !path.exists() {
+            std::fs::create_dir_all(path).map_err(|e| e.to_string())?;
+        }
+    }
+
+    Ok(selected)
+}
+
+#[tauri::command]
 pub fn delete_note(
     id: String,
     vault_manager: State<'_, VaultManager>,
