@@ -80,16 +80,7 @@
     });
     listen("shortcut:new_note", () => handleNewNote());
     listen("shortcut:search_notes", () => handleSearch());
-    listen("shortcut:toggle_pin", async () => {
-      const note = get(selectedNote);
-      if (note) {
-        const pinned = await togglePin(note.id);
-        pinnedNoteIds.update((s) => {
-          pinned ? s.add(note.id) : s.delete(note.id);
-          return new Set(s);
-        });
-      }
-    });
+    listen("shortcut:toggle_pin", () => handleTogglePin());
     listen("shortcut:reset_position", async () => {
       const s = get(settings);
       const position = s.panel_position || "center";
@@ -189,6 +180,17 @@
     editorFocusTrigger.set(true);
   }
 
+  async function handleTogglePin() {
+    const note = get(selectedNote);
+    if (note) {
+      const pinned = await togglePin(note.id);
+      pinnedNoteIds.update((s) => {
+        pinned ? s.add(note.id) : s.delete(note.id);
+        return new Set(s);
+      });
+    }
+  }
+
   function handleSelectNote(note: Note) {
     // Save current note before switching
     if ($selectedNote && $editingContent !== $selectedNote.content) {
@@ -214,6 +216,9 @@
       onNewNote={handleNewNote}
       onSearch={handleSearch}
       onSettings={handleSettings}
+      onTogglePin={handleTogglePin}
+      isPinned={$selectedNote ? $pinnedNoteIds.has($selectedNote.id) : false}
+      hasNote={!!$selectedNote}
     />
     <div class="divider"></div>
 

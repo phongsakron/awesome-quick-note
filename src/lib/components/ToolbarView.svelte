@@ -7,9 +7,12 @@
     onNewNote: () => void;
     onSearch: () => void;
     onSettings: () => void;
+    onTogglePin: () => void;
+    isPinned: boolean;
+    hasNote: boolean;
   }
 
-  let { onNewNote, onSearch, onSettings }: Props = $props();
+  let { onNewNote, onSearch, onSettings, onTogglePin, isPinned, hasNote }: Props = $props();
   const mod = modifierKey();
 </script>
 
@@ -27,6 +30,24 @@
     </button>
   </div>
   <div class="toolbar-right">
+    {#if hasNote}
+      <button
+        class="toolbar-btn"
+        class:pinned={isPinned}
+        onclick={onTogglePin}
+        title="{mod}+Alt+P"
+      >
+        {#if isPinned}
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M4.146.146A.5.5 0 0 1 4.5 0h7a.5.5 0 0 1 .5.5c0 .68-.342 1.174-.646 1.479-.126.125-.25.224-.354.298v4.431l.078.048c.203.127.476.314.751.555C12.36 7.775 13 8.527 13 9.5a.5.5 0 0 1-.5.5h-4v4.5a.5.5 0 0 1-1 0V10h-4a.5.5 0 0 1-.5-.5c0-.973.64-1.725 1.17-2.189A5.921 5.921 0 0 1 5 6.708V2.277a2.77 2.77 0 0 1-.354-.298C4.342 1.674 4 1.179 4 .5a.5.5 0 0 1 .146-.354z"/>
+          </svg>
+        {:else}
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M4.146.146A.5.5 0 0 1 4.5 0h7a.5.5 0 0 1 .5.5c0 .68-.342 1.174-.646 1.479-.126.125-.25.224-.354.298v4.431l.078.048c.203.127.476.314.751.555C12.36 7.775 13 8.527 13 9.5a.5.5 0 0 1-.5.5h-4v4.5a.5.5 0 0 1-1 0V10h-4a.5.5 0 0 1-.5-.5c0-.973.64-1.725 1.17-2.189A5.921 5.921 0 0 1 5 6.708V2.277a2.77 2.77 0 0 1-.354-.298C4.342 1.674 4 1.179 4 .5a.5.5 0 0 1 .146-.354zm1.58 1.408l-.002-.001.002.001zm-.002-.001A1.13 1.13 0 0 1 5.287 1h5.426a1.13 1.13 0 0 1-.437.553L10 1.735V6.85a.5.5 0 0 1-.223.416l-.166.104a4.944 4.944 0 0 0-.625.463A3.158 3.158 0 0 0 8.2 8.8h-.4a3.158 3.158 0 0 0-.786-.967 4.944 4.944 0 0 0-.625-.463l-.166-.104A.5.5 0 0 1 6 6.85V1.735l-.276-.182z"/>
+          </svg>
+        {/if}
+      </button>
+    {/if}
     <GitSyncStatusView />
     <button class="toolbar-btn" onclick={onSettings} title="{mod}+,">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
@@ -70,5 +91,9 @@
   .toolbar-btn:hover {
     color: var(--monokai-foreground);
     background: var(--monokai-tab-background);
+  }
+
+  .toolbar-btn.pinned {
+    color: var(--monokai-number);
   }
 </style>
