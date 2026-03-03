@@ -53,7 +53,15 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: ${{ github.ref_name }}
-          releaseBody: "See the assets to download and install this version."
+          releaseBody: |
+            ## Install
+
+            **macOS:** Download the `.dmg`, open it, and drag SideNote to Applications.
+
+            > If macOS says the app is damaged, run: `xattr -cr /Applications/SideNote.app`
+            > This is needed because the app is not signed with an Apple Developer certificate.
+
+            **Linux:** Download `.AppImage` or `.deb`.
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
