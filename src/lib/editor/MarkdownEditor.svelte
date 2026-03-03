@@ -83,6 +83,16 @@
       const lineDiv = lineDivs[i];
 
       if (lineDiv.contains(container) || lineDiv === container) {
+        // Check if cursor is inside a non-editable element (e.g. Copy button)
+        let node: Node | null = container;
+        while (node && node !== lineDiv) {
+          if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).contentEditable === "false") {
+            // Cursor is in a button overlay; treat as end of line text
+            offset += getTextContentWithoutOverlays(lineDiv).length;
+            return offset;
+          }
+          node = node.parentNode;
+        }
         const subRange = document.createRange();
         subRange.selectNodeContents(lineDiv);
         subRange.setEnd(container, containerOffset);
@@ -90,7 +100,7 @@
         return offset;
       }
 
-      offset += lineDiv.textContent?.length || 0;
+      offset += getTextContentWithoutOverlays(lineDiv).length;
     }
 
     return offset;
@@ -125,11 +135,21 @@
       if (i > 0) current += 1; // newline between lines
 
       const lineDiv = lineDivs[i];
-      const lineLen = lineDiv.textContent?.length || 0;
+      const lineLen = getTextContentWithoutOverlays(lineDiv).length;
 
       if (current + lineLen >= offset || i === lineDivs.length - 1) {
         const targetInLine = Math.min(Math.max(offset - current, 0), lineLen);
-        const walker = document.createTreeWalker(lineDiv, NodeFilter.SHOW_TEXT);
+        const walker = document.createTreeWalker(lineDiv, NodeFilter.SHOW_TEXT, {
+          acceptNode: (node) => {
+            // Skip text nodes inside non-editable elements (buttons)
+            let parent = node.parentElement;
+            while (parent && parent !== lineDiv) {
+              if (parent.contentEditable === "false") return NodeFilter.FILTER_REJECT;
+              parent = parent.parentElement;
+            }
+            return NodeFilter.FILTER_ACCEPT;
+          },
+        });
         let innerCurrent = 0;
 
         while (walker.nextNode()) {
@@ -175,6 +195,21 @@
     }
   }
 
+  // Get text content of an element, excluding non-editable overlays (Copy/Format buttons)
+  function getTextContentWithoutOverlays(el: HTMLElement): string {
+    let text = "";
+    for (const node of el.childNodes) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        text += node.textContent || "";
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const elem = node as HTMLElement;
+        if (elem.contentEditable === "false") continue;
+        text += getTextContentWithoutOverlays(elem);
+      }
+    }
+    return text;
+  }
+
   function getPlainText(el: HTMLDivElement): string {
     // Extract text content preserving newlines from div structure
     let text = "";
@@ -201,7 +236,7 @@
         } else if (el.tagName === "DIV") {
           if (!isFirstLine) text += "\n";
           isFirstLine = false;
-          text += el.textContent || "";
+          text += getTextContentWithoutOverlays(el);
         } else {
           text += el.textContent || "";
         }
